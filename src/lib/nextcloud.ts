@@ -12,10 +12,10 @@ export function buildPdfFilename(userName: string, sessionDate: string, formatio
   return `${sanitize(userName)}_${jj}${mm}${aa}_${sanitize(formationTitle)}.pdf`;
 }
 
-async function generatePdfBlob(html: string): Promise<Blob> {
+export async function generatePdfBlob(html: string): Promise<Blob> {
   const clean = html.replace(/<script[\s\S]*?<\/script>/gi, '');
 
-  // Extraire les styles du <head> et les injecter dans le document courant
+  // Extraire les <style> du <head> et les injecter dans le document courant
   const styleContent = [...clean.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)]
     .map(m => m[1])
     .join('\n');
@@ -23,17 +23,20 @@ async function generatePdfBlob(html: string): Promise<Blob> {
   styleEl.textContent = styleContent;
   document.head.appendChild(styleEl);
 
-  // Extraire uniquement le contenu du <body>
-  const bodyMatch = clean.match(/<body[^>]*>([\s\S]*?)<\/body>/is);
-  const bodyContent = bodyMatch?.[1] ?? clean;
+  // Extraire le contenu du <body> (pas du HTML complet — innerHTML ne supporte pas <html>/<head>)
+  const bodyMatch = clean.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+  const bodyContent = bodyMatch ? bodyMatch[1] : clean;
 
+  // L'élément DOIT être dans le viewport pour que html2canvas le capture.
+  // On le place en fixed top:0 left:0 et on le retire dès la capture terminée.
   const wrapper = document.createElement('div');
-  wrapper.style.cssText = 'position:absolute;top:0;left:-9999px;width:860px;background:#fff;';
+  wrapper.style.cssText = 'position:fixed;top:0;left:0;width:860px;background:#fff;z-index:9999;pointer-events:none;';
   wrapper.innerHTML = bodyContent;
   document.body.appendChild(wrapper);
 
-  // Deux frames pour que le navigateur calcule le layout avec les styles injectés
+  // Laisser le navigateur calculer le layout avec les styles injectés
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  await new Promise(r => requestAnimationFrame(r));
 
   try {
     const blob: Blob = await html2pdf()
@@ -43,9 +46,11 @@ async function generatePdfBlob(html: string): Promise<Blob> {
         html2canvas: {
           scale: 2,
           useCORS: true,
+          allowTaint: true,
           logging: false,
           backgroundColor: '#ffffff',
           windowWidth: 860,
+          scrollX: 0,
           scrollY: 0,
         },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
@@ -59,9 +64,7 @@ async function generatePdfBlob(html: string): Promise<Blob> {
   }
 }
 
-export async function generateAndUpload(html: string, filename: string): Promise<void> {
-  const blob = await generatePdfBlob(html);
-
+export async function uploadPdfBlob(blob: Blob, filename: string): Promise<void> {
   const res = await fetch(`/api/nextcloud-upload?filename=${encodeURIComponent(filename)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/pdf' },
@@ -72,4 +75,9 @@ export async function generateAndUpload(html: string, filename: string): Promise
     const data: { error?: string } = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
     throw new Error(data.error ?? `HTTP ${res.status}`);
   }
+}
+
+export async function generateAndUpload(html: string, filename: string): Promise<void> {
+  const blob = await generatePdfBlob(html);
+  await uploadPdfBlob(blob, filename);
 }

@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { subscribeToSession, subscribeToMessages, updateSession, getMessages } from '../../lib/sessions';
 import { getQuestionnaireById } from '../../lib/questionnaire';
 import { computeScores, computeSynthesis, computePositioningSynthesis, generateExportHTML, generatePositioningHTML, downloadHTML } from '../../lib/export';
-import { buildPdfFilename, generateAndUpload } from '../../lib/nextcloud';
+import { buildPdfFilename, generatePdfBlob, uploadPdfBlob } from '../../lib/nextcloud';
 import type { Session, Message, Questionnaire } from '../../types';
 
 function ChatBubble({ msg }: { msg: Message }) {
@@ -109,8 +109,10 @@ export default function AdminSessionMonitor() {
       }
 
       setExportStep('pdf');
+      const pdfBlob = await generatePdfBlob(html);
+
       setExportStep('nextcloud');
-      await generateAndUpload(html, pdfFilename);
+      await uploadPdfBlob(pdfBlob, pdfFilename);
 
       setExportStep('done');
       setTimeout(() => setExportStep(''), 3000);
