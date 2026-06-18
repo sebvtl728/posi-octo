@@ -9,7 +9,6 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import { Mistral } from '@mistralai/mistralai';
 import { GoogleGenAI } from '@google/genai';
-import puppeteer from 'puppeteer';
 
 async function startServer() {
   const app = express();
@@ -19,9 +18,9 @@ async function startServer() {
 
   // API Routes
 
-  app.post('/api/pdf-upload', async (req, res) => {
-    const { html, filename } = req.body as { html?: string; filename?: string };
-    if (!html || !filename) return res.status(400).json({ error: 'html et filename requis.' });
+  app.post('/api/nextcloud-upload', express.raw({ type: 'application/pdf', limit: '20mb' }), async (req, res) => {
+    const filename = req.query.filename as string;
+    if (!filename) return res.status(400).json({ error: 'Paramètre filename manquant.' });
 
     const baseUrl = process.env.NEXTCLOUD_URL;
     const user = process.env.NEXTCLOUD_USER;
@@ -32,36 +31,18 @@ async function startServer() {
       return res.status(500).json({ error: 'Nextcloud non configuré (NEXTCLOUD_URL / USER / PASSWORD manquants).' });
     }
 
-    let browser;
+    const davRoot = `${baseUrl.replace(/\/$/, '')}/remote.php/dav/files/${user}`;
+    const auth = Buffer.from(`${user}:${password}`).toString('base64');
+    const authHeaders = { Authorization: `Basic ${auth}` };
+
     try {
-      // — Génération PDF via Puppeteer —
-      browser = await puppeteer.launch({
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-        headless: true,
-      });
-      const page = await browser.newPage();
-      await page.setViewport({ width: 1200, height: 900 });
-      await page.setContent(html, { waitUntil: 'networkidle2', timeout: 30000 });
-      const pdfBuffer = await page.pdf({
-        format: 'A4',
-        margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' },
-        printBackground: true,
-      });
-      await browser.close();
-      browser = null;
-
-      // — Upload WebDAV vers Nextcloud —
-      const davRoot = `${baseUrl.replace(/\/$/, '')}/remote.php/dav/files/${user}`;
-      const auth = Buffer.from(`${user}:${password}`).toString('base64');
-      const authHeaders = { Authorization: `Basic ${auth}` };
-
-      // Crée les dossiers si nécessaire
+      // Crée les dossiers si nécessaire (MKCOL)
       let currentPath = '';
       for (const segment of folder.split('/').filter(Boolean)) {
         currentPath += `/${segment}`;
         const r = await fetch(`${davRoot}${currentPath}`, { method: 'MKCOL', headers: authHeaders }).catch(() => null);
         if (r && r.status !== 201 && r.status !== 405) {
-          return res.status(500).json({ error: `Impossible de créer le dossier Nextcloud "${currentPath}" (HTTP ${r.status})` });
+          return res.status(500).json({ error: `Impossible de créer le dossier "${currentPath}" (HTTP ${r?.status})` });
         }
       }
 
@@ -69,18 +50,17 @@ async function startServer() {
       const put = await fetch(uploadUrl, {
         method: 'PUT',
         headers: { ...authHeaders, 'Content-Type': 'application/pdf' },
-        body: pdfBuffer,
+        body: req.body as Buffer,
       });
 
       if (!put.ok) {
         const body = await put.text().catch(() => '');
-        return res.status(500).json({ error: `Upload Nextcloud ${put.status}${body ? ': ' + body.substring(0, 200) : ''}` });
+        return res.status(500).json({ error: `Nextcloud ${put.status}${body ? ': ' + body.substring(0, 200) : ''}` });
       }
 
       res.json({ ok: true });
     } catch (err: unknown) {
-      if (browser) await browser.close().catch(() => {});
-      res.status(500).json({ error: err instanceof Error ? err.message : 'Erreur Puppeteer/WebDAV' });
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Erreur WebDAV' });
     }
   });
 
