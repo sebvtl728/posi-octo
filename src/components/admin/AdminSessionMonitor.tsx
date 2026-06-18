@@ -95,21 +95,22 @@ export default function AdminSessionMonitor() {
       await updateSession(id, { scores });
 
       setExportStep('synthesis');
+      let synthesis: string;
       let html: string;
       const pdfFilename = buildPdfFilename(session.userName || id, session.createdAt, parsed.title);
 
       if (session.type === 'positioning') {
-        const synthesis = await computePositioningSynthesis(session, allMessages);
+        synthesis = await computePositioningSynthesis(session, allMessages);
         html = generatePositioningHTML(session, allMessages, scores, synthesis, parsed.title);
         downloadHTML(html, `positionnement-${session.userName || id}-${new Date().toLocaleDateString('fr-FR').replace(/\//g, '-')}.html`);
       } else {
-        const synthesis = await computeSynthesis(session, allMessages, scores);
+        synthesis = await computeSynthesis(session, allMessages, scores);
         html = generateExportHTML(session, allMessages, scores, synthesis, parsed.title);
         downloadHTML(html, `session-${session.userName || id}-${new Date().toLocaleDateString('fr-FR').replace(/\//g, '-')}.html`);
       }
 
       setExportStep('pdf');
-      const pdfBlob = await generatePdfBlob(html);
+      const pdfBlob = await generatePdfBlob(session, allMessages, scores, synthesis, parsed.title);
 
       setExportStep('nextcloud');
       await uploadPdfBlob(pdfBlob, pdfFilename);
