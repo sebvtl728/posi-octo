@@ -179,25 +179,27 @@ app.post('/api/chat', async (req, res) => {
 });
 
 if (!process.env.VERCEL) {
-  if (process.env.NODE_ENV !== 'production') {
-    // Dev local : Vite en import dynamique pour ne pas le bundler sur Vercel
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true, allowedHosts: true },
-      appType: 'spa',
+  (async () => {
+    if (process.env.NODE_ENV !== 'production') {
+      // Dev local : Vite en import dynamique pour ne pas le bundler sur Vercel
+      const { createServer: createViteServer } = await import('vite');
+      const vite = await createViteServer({
+        server: { middlewareMode: true, allowedHosts: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+    } else {
+      // Production locale : sert les fichiers statiques depuis dist/
+      const distPath = path.join(process.cwd(), 'dist');
+      app.use(express.static(distPath));
+      app.get('*', (_req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on http://0.0.0.0:${PORT}`);
     });
-    app.use(vite.middlewares);
-  } else {
-    // Production locale : sert les fichiers statiques depuis dist/
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
-  });
+  })();
 }
 
 // Sur Vercel : Vercel CDN sert les fichiers statiques, le serveur gère uniquement /api/*
