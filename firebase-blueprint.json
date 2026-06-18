@@ -1,0 +1,53 @@
+{
+  "entities": {
+    "Session": {
+      "title": "Session",
+      "description": "An interactive chatbot session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["active", "completed"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "createdAt", "status"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A message in a chat session",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "assistant", "system"] },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sessionId", "role", "content", "createdAt"]
+    },
+    "Document": {
+      "title": "Document",
+      "description": "JSON document uploaded for context",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sessionId", "content", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/Session" },
+      "description": "Stores user chat sessions"
+    },
+    "/sessions/{sessionId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Stores messages within a session"
+    },
+    "/sessions/{sessionId}/documents/{documentId}": {
+      "schema": { "$ref": "#/entities/Document" },
+      "description": "Stores documents within a session"
+    }
+  }
+}
