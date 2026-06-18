@@ -74,8 +74,8 @@ export default function UserEntry() {
           <p className="text-xs text-slate-400 text-center mb-6">{description}</p>
         )}
 
-        {/* QR Code */}
-        <div className="flex justify-center mb-6">
+        {/* QR Code — masqué sur mobile (on y est déjà) */}
+        <div className="hidden sm:flex justify-center mb-6">
           <QRCodePanel url={pageUrl} size={140} label="Partagez ce QR code" />
         </div>
 

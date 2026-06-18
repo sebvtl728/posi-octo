@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { subscribeToSession, subscribeToMessages, updateSession, addMessage } from '../../lib/sessions';
@@ -126,6 +126,26 @@ Sois chaleureux, professionnel et rassurant. À la fin, annonce que l'entretien 
   };
 
   const [sendError, setSendError] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const resizeTextarea = useCallback(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+  }, []);
+
+  // Extrait les options numérotées du dernier message IA (ex: "1. Oui\n2. Non")
+  const quickReplies = (() => {
+    const last = [...messages].reverse().find(m => m.role === 'assistant');
+    if (!last) return null;
+    const lines = last.content.split('\n')
+      .map(l => l.trim())
+      .filter(l => /^\d+[.)]\s+\S/.test(l))
+      .map(l => l.replace(/^\d+[.)]\s+/, '').trim())
+      .filter(l => l.length > 0 && l.length <= 80);
+    return lines.length >= 2 && lines.length <= 6 ? lines : null;
+  })();
 
   const handleSend = async (content: string) => {
     if (!sessionId || !content.trim() || sending || !questionnaire) return;
@@ -263,30 +283,55 @@ Sois chaleureux, professionnel et rassurant. À la fin, annonce que l'entretien 
           <div ref={bottomRef} />
         </div>
 
-        <div className="p-4 border-t border-slate-200 bg-white">
-          <div className="flex gap-2">
-            <input
-              type="text"
+        {/* Chips de réponse rapide — mobile uniquement, si le dernier message contient des options numérotées */}
+        {quickReplies && !sending && (
+          <div className="sm:hidden px-4 pb-2 bg-white border-t border-slate-100 flex flex-wrap gap-2 pt-2">
+            {quickReplies.map((option, i) => (
+              <button
+                key={i}
+                onClick={() => handleSend(option)}
+                className="px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl text-sm font-medium active:bg-indigo-100 transition-colors"
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="p-3 border-t border-slate-200 bg-white pb-safe">
+          <div className="flex gap-2 items-end">
+            <textarea
+              ref={textareaRef}
+              rows={1}
               value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend(input)}
-              placeholder="Votre réponse..."
+              onChange={e => { setInput(e.target.value); resizeTextarea(); }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend(input);
+                  if (textareaRef.current) textareaRef.current.style.height = 'auto';
+                }
+              }}
+              placeholder="Votre réponse…"
               disabled={sending}
-              className="flex-1 px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
+              className="flex-1 px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 resize-none leading-snug"
             />
             <button
-              onClick={() => handleSend(input)}
+              onClick={() => {
+                handleSend(input);
+                if (textareaRef.current) textareaRef.current.style.height = 'auto';
+              }}
               disabled={sending || !input.trim()}
-              className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+              className="px-4 py-3 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors shrink-0"
             >
-              Envoyer
+              ↑
             </button>
           </div>
         </div>
       </div>
 
-      {/* QR panel */}
-      <div className="w-52 shrink-0 bg-white border-l border-slate-200 flex flex-col items-center justify-center p-5 gap-3">
+      {/* Panneau QR — visible uniquement sur desktop */}
+      <div className="hidden md:flex w-52 shrink-0 bg-white border-l border-slate-200 flex-col items-center justify-center p-5 gap-3">
         <p className="text-[10px] text-slate-400 text-center font-medium">Reprendre sur mobile</p>
         <QRCodePanel url={sessionUrl} size={120} label="" />
         <p className="text-[10px] text-slate-300 text-center break-all">{sessionUrl}</p>
