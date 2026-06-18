@@ -1,10 +1,13 @@
 {
   "version": 2,
+  "buildCommand": "vite build",
+  "outputDirectory": "dist",
   "builds": [
     { "src": "server.ts", "use": "@vercel/node" }
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "server.ts" },
-    { "src": "/(.*)", "dest": "server.ts" }
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
