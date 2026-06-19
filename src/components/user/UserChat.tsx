@@ -70,6 +70,10 @@ export default function UserChat() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, sending]);
 
+  useEffect(() => {
+    setSelectedOptions([]);
+  }, [messages]);
+
   const [welcomeError, setWelcomeError] = useState('');
 
   const buildSystemPrompt = (userName: string): string => {
@@ -142,6 +146,7 @@ Sois chaleureux, professionnel et rassurant. À la fin, annonce que l'entretien 
   };
 
   const [sendError, setSendError] = useState('');
+  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const resizeTextarea = useCallback(() => {
@@ -152,16 +157,29 @@ Sois chaleureux, professionnel et rassurant. À la fin, annonce que l'entretien 
   }, []);
 
   // Extrait les options numérotées du dernier message IA (ex: "1. Oui\n2. Non")
-  const quickReplies = (() => {
+  const buttonOptions = (() => {
+    if (sending) return null;
     const last = [...messages].reverse().find(m => m.role === 'assistant');
     if (!last) return null;
     const lines = last.content.split('\n')
       .map(l => l.trim())
       .filter(l => /^\d+[.)]\s+\S/.test(l))
       .map(l => l.replace(/^\d+[.)]\s+/, '').trim())
-      .filter(l => l.length > 0 && l.length <= 80);
-    return lines.length >= 2 && lines.length <= 6 ? lines : null;
+      .filter(l => l.length > 0 && l.length <= 100);
+    return lines.length >= 2 && lines.length <= 8 ? lines : null;
   })();
+
+  const toggleOption = (option: string) => {
+    setSelectedOptions(prev =>
+      prev.includes(option) ? prev.filter(o => o !== option) : [...prev, option]
+    );
+  };
+
+  const handleValidate = () => {
+    if (selectedOptions.length === 0 || sending) return;
+    handleSend(selectedOptions.join(', '));
+    setSelectedOptions([]);
+  };
 
   const handleSend = async (content: string) => {
     if (!sessionId || !content.trim() || sending || !questionnaire) return;
@@ -305,22 +323,44 @@ Sois chaleureux, professionnel et rassurant. À la fin, annonce que l'entretien 
           <div ref={bottomRef} />
         </div>
 
-        {/* Chips de réponse rapide — mobile uniquement, si le dernier message contient des options numérotées */}
-        {quickReplies && !sending && (
-          <div className="sm:hidden px-4 pb-2 bg-white border-t border-slate-100 flex flex-wrap gap-2 pt-2">
-            {quickReplies.map((option, i) => (
-              <button
-                key={i}
-                onClick={() => handleSend(option)}
-                className="px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl text-sm font-medium active:bg-indigo-100 transition-colors"
-              >
-                {option}
-              </button>
-            ))}
+        {/* Zone d'interaction — mobile : boutons si options détectées, sinon textarea */}
+        {buttonOptions ? (
+          <div className="sm:hidden border-t border-slate-200 bg-white pb-safe">
+            <div className={`px-3 pt-3 flex flex-col gap-2 ${buttonOptions.length > 4 ? 'max-h-60 overflow-y-auto' : ''}`}>
+              {buttonOptions.map((option, i) => {
+                const isSelected = selectedOptions.includes(option);
+                return (
+                  <button
+                    key={i}
+                    onClick={() => toggleOption(option)}
+                    className={`w-full min-h-[52px] px-4 py-3 rounded-xl text-[15px] text-left font-medium transition-colors flex items-center justify-between gap-3 ${
+                      isSelected
+                        ? 'bg-indigo-50 border-2 border-indigo-400 text-indigo-800'
+                        : 'bg-white border border-slate-200 text-slate-800 active:bg-slate-50'
+                    }`}
+                  >
+                    <span>{option}</span>
+                    {isSelected && <span className="text-indigo-600 shrink-0">✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedOptions.length > 0 && (
+              <div className="px-3 py-3">
+                <button
+                  onClick={handleValidate}
+                  disabled={sending}
+                  className="w-full py-3 bg-indigo-600 text-white rounded-xl text-sm font-semibold disabled:opacity-50 transition-colors active:bg-indigo-700"
+                >
+                  Valider
+                </button>
+              </div>
+            )}
           </div>
-        )}
+        ) : null}
 
-        <div className="p-3 border-t border-slate-200 bg-white pb-safe">
+        {/* Textarea — desktop toujours visible, mobile visible uniquement si pas de boutons */}
+        <div className={`${buttonOptions ? 'hidden sm:block' : ''} p-3 border-t border-slate-200 bg-white pb-safe`}>
           <div className="flex gap-2 items-end">
             <textarea
               ref={textareaRef}
