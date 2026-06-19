@@ -74,7 +74,14 @@ Le mode single (tap = envoi immédiat) est supprimé. Toutes les questions avec 
 
 **Correction :**
 - Filtrer les catégories avant de les envoyer à l'IA : ne garder que `name` et `questions[].question` (supprimer `expectedAnswers` et `hint`)
-- Ajouter une consigne explicite dans le prompt : _"Ne révèle jamais les réponses attendues, ne suggère pas la bonne réponse, ne donne aucun indice orienté. Pose les questions telles quelles et laisse l'utilisateur répondre librement."_
+- Ajouter des consignes strictes dans le prompt :
+  - _"Ne révèle jamais les réponses attendues, ne suggère pas la bonne réponse, ne donne aucun indice orienté."_
+  - _"Pose UNE seule question par message."_
+  - _"N'avance JAMAIS vers la question suivante sans avoir reçu une réponse explicite de l'utilisateur."_
+  - _"Ne réponds JAMAIS à une question à la place de l'utilisateur, même à titre d'exemple."_
+  - _"N'inclus jamais d'exemples de réponses dans tes messages."_
+
+**Cause du bug des 3 questions auto-répondues :** l'IA voyait les `expectedAnswers`, les utilisait pour simuler des réponses utilisateur, et enchaînait les questions sans attendre d'interaction réelle. La suppression des `expectedAnswers` + les consignes ci-dessus corrigent ce comportement.
 
 ```ts
 // Avant (fuite des réponses)
