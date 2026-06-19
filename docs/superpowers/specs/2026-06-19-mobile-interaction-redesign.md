@@ -23,8 +23,10 @@ Les chips sont petits et le mode multi-sélection n'existe pas. L'expérience su
 | Condition | Mode |
 |---|---|
 | Aucune option numérotée (`/^\d+[.)]\s+\S/`) | `text` |
-| Options détectées + mot-clé multi (`plusieurs`, `cochez`, `sélectionnez`, `choisissez`, `plusieurs réponses`) | `multi` |
-| Options détectées, sans mot-clé multi | `single` |
+| Options détectées + mot-clé multi (`plusieurs`, `cochez`, `sélectionnez`, `choisissez`, `plusieurs réponses`, `toutes les`, `tout ce qui`) | `multi` |
+| Options détectées, sans mot-clé multi | `multi` par défaut |
+
+**Règle de sécurité : en présence d'options numérotées, on utilise toujours le mode `multi`.** Cela évite l'envoi immédiat involontaire sur les questions à réponse unique. L'utilisateur clique sur un bouton puis tape "Valider" — une étape de plus, mais zéro risque de valider trop tôt. Le mode `single` (tap = envoi immédiat) est supprimé pour éviter toute ambiguïté.
 
 La détection tourne uniquement côté client, sans modification du prompt IA ni du backend.
 
@@ -36,11 +38,8 @@ La détection tourne uniquement côté client, sans modification du prompt IA ni
 - Affiche le textarea + bouton ↑ existants, **inchangés**
 - Cas : questions ouvertes, questions de positionnement libres
 
-### Mode `single`
-- **Remplace** la zone textarea par une liste verticale de boutons pleine largeur
-- Tap sur un bouton → envoie immédiatement la réponse correspondante
-- Feedback visuel au tap : fond indigo, texte blanc (flash avant disparition)
-- Textarea masquée
+### Mode `single` — supprimé
+Le mode single (tap = envoi immédiat) est supprimé. Toutes les questions avec options numérotées passent par le mode `multi` pour éviter toute validation prématurée.
 
 ### Mode `multi`
 - Même boutons, avec état **sélectionné** persistant (fond indigo clair + coche ✓)
