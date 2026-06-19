@@ -73,6 +73,16 @@ export default function UserChat() {
   const [welcomeError, setWelcomeError] = useState('');
 
   const buildSystemPrompt = (userName: string): string => {
+    const strictRules = `
+
+Règles absolues — tu dois les respecter sans exception :
+- Pose UNE seule question par message. Jamais deux.
+- N'avance JAMAIS vers la question suivante sans avoir reçu une réponse explicite de l'utilisateur dans ce chat.
+- Ne réponds JAMAIS à une question à la place de l'utilisateur, même à titre d'exemple ou d'illustration.
+- Ne révèle jamais les réponses attendues ou correctes.
+- N'inclus aucun indice, suggestion orientée ou exemple de réponse dans tes messages.
+- Si l'utilisateur n'a pas encore répondu, attends. Ne continue pas.`;
+
     if (session?.type === 'positioning') {
       return `Tu es TypBot, un assistant de positionnement Qualiopi. Avant la formation "${questionnaire?.title}", tu conduis un entretien de positionnement individuel avec ${userName} pour évaluer son niveau initial et identifier ses besoins, conformément aux indicateurs I5, I6 et I9 du référentiel Qualiopi 2021.
 
@@ -84,9 +94,15 @@ Explore avec bienveillance, en posant UNE question à la fois :
 
 Domaines à explorer : ${JSON.stringify(questionnaire?.categories?.map((c: { name: string }) => c.name))}.
 
-Sois chaleureux, professionnel et rassurant. À la fin, annonce que l'entretien est terminé et que le formateur recevra un compte-rendu personnalisé.`;
+Sois chaleureux, professionnel et rassurant. À la fin, annonce que l'entretien est terminé et que le formateur recevra un compte-rendu personnalisé.${strictRules}`;
     }
-    return `Tu es TypBot, un assistant IA qui guide des utilisateurs à travers un questionnaire interactif. Le questionnaire s'appelle "${questionnaire?.title}". Voici les catégories et questions:\n\n${JSON.stringify(questionnaire?.categories, null, 2)}\n\nSois bienveillant, encourageant et guide l'utilisateur à travers chaque question du questionnaire.`;
+
+    const categoriesForAI = questionnaire?.categories.map(c => ({
+      name: c.name,
+      questions: c.questions.map((q: { question: string }) => ({ question: q.question })),
+    }));
+
+    return `Tu es TypBot, un assistant IA qui guide des utilisateurs à travers un questionnaire interactif. Le questionnaire s'appelle "${questionnaire?.title}". Voici les catégories et questions :\n\n${JSON.stringify(categoriesForAI, null, 2)}\n\nSois bienveillant et encourageant.${strictRules}`;
   };
 
   const triggerWelcome = async (userName: string) => {
