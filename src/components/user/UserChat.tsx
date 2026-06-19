@@ -70,22 +70,18 @@ export default function UserChat() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, sending]);
 
-  useEffect(() => {
-    setSelectedOptions([]);
-  }, [messages]);
-
   const [welcomeError, setWelcomeError] = useState('');
 
   const buildSystemPrompt = (userName: string): string => {
     const strictRules = `
 
-Règles absolues — tu dois les respecter sans exception :
-- Pose UNE seule question par message. Jamais deux.
-- N'avance JAMAIS vers la question suivante sans avoir reçu une réponse explicite de l'utilisateur dans ce chat.
-- Ne réponds JAMAIS à une question à la place de l'utilisateur, même à titre d'exemple ou d'illustration.
-- Ne révèle jamais les réponses attendues ou correctes.
-- N'inclus aucun indice, suggestion orientée ou exemple de réponse dans tes messages.
-- Si l'utilisateur n'a pas encore répondu, attends. Ne continue pas.`;
+Règles absolues :
+- Pose UNE seule question par message.
+- N'avance pas à la question suivante sans réponse explicite de l'utilisateur.
+- Ne réponds jamais à la place de l'utilisateur.
+- Ne révèle pas les réponses attendues dans tes questions.
+- N'utilise le prénom de l'utilisateur qu'occasionnellement, pas dans chaque message.
+- Ne commence JAMAIS tes messages par "Merci pour ta réponse" ou une formule similaire. Varie tes feedbacks : commente directement ce qui a été dit, corrige si nécessaire, puis enchaîne naturellement vers la question suivante.`;
 
     if (session?.type === 'positioning') {
       return `Tu es TypBot, un assistant de positionnement Qualiopi. Avant la formation "${questionnaire?.title}", tu conduis un entretien de positionnement individuel avec ${userName} pour évaluer son niveau initial et identifier ses besoins, conformément aux indicateurs I5, I6 et I9 du référentiel Qualiopi 2021.
@@ -98,26 +94,26 @@ Explore avec bienveillance, en posant UNE question à la fois :
 
 Domaines à explorer : ${JSON.stringify(questionnaire?.categories?.map((c: { name: string }) => c.name))}.
 
-Sois chaleureux, professionnel et rassurant. À la fin, annonce que l'entretien est terminé et que le formateur recevra un compte-rendu personnalisé.${strictRules}`;
+Sois chaleureux, professionnel et rassurant. À la fin, annonce que l'entretien est terminé.${strictRules}`;
     }
 
     const categoriesForAI = questionnaire?.categories.map(c => ({
       name: c.name,
-      questions: c.questions.map((q: { question: string; hint?: string }) => ({
+      questions: c.questions.map((q: { question: string; expectedAnswers?: string[]; hint?: string }) => ({
         question: q.question,
+        expectedAnswers: q.expectedAnswers ?? [],
         ...(q.hint ? { hint: q.hint } : {}),
       })),
     }));
 
-    return `Tu es TypBot, un assistant IA qui prépare ${userName} à une soutenance orale sur le thème "${questionnaire?.title}". Tu poses des questions de soutenance à ${userName} pour l'entraîner.
+    return `Tu es un examinateur pédagogique qui prépare ${userName} à une soutenance orale sur "${questionnaire?.title}".
 
-Voici les catégories et sujets à aborder :\n\n${JSON.stringify(categoriesForAI, null, 2)}
+Voici les questions à poser dans l'ordre :\n\n${JSON.stringify(categoriesForAI, null, 2)}
 
-Important : les champs "question" dans ce JSON sont des **thèmes ou mots-clés**, pas des phrases interrogatives. Tu dois reformuler chaque thème en une vraie question orale de soutenance, naturelle et pédagogique (ex : "Format papier" → "Quels sont les formats papier standard que tu connais ?").
-
-Si un champ "hint" est présent, utilise-le pour orienter la formulation de ta question — sans en révéler le contenu à ${userName}.
-
-Sois encourageant et bienveillant.${strictRules}`;
+Les champs "question" sont des thèmes ou mots-clés. Reformule chaque thème en une vraie question orale, précise et pédagogique.
+Les "expectedAnswers" sont pour ton évaluation uniquement — ne les cite pas dans tes questions.
+Si un "hint" est présent, utilise-le pour mieux formuler ta question.
+Après chaque réponse, donne un feedback court et direct (correct/incomplet/incorrect), puis pose la question suivante.${strictRules}`;
   };
 
   const triggerWelcome = async (userName: string) => {
@@ -158,6 +154,7 @@ Sois encourageant et bienveillant.${strictRules}`;
 
   const [sendError, setSendError] = useState('');
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
+  const [questionIndex, setQuestionIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const resizeTextarea = useCallback(() => {
@@ -167,18 +164,12 @@ Sois encourageant et bienveillant.${strictRules}`;
     ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
   }, []);
 
-  // Extrait les options numérotées du dernier message IA (ex: "1. Oui\n2. Non")
-  const buttonOptions = (() => {
-    if (sending) return null;
-    const last = [...messages].reverse().find(m => m.role === 'assistant');
-    if (!last) return null;
-    const lines = last.content.split('\n')
-      .map(l => l.trim())
-      .filter(l => /^\d+[.)]\s+\S/.test(l))
-      .map(l => l.replace(/^\d+[.)]\s+/, '').trim())
-      .filter(l => l.length > 0 && l.length <= 100);
-    return lines.length >= 2 && lines.length <= 8 ? lines : null;
-  })();
+  const allQuestions = questionnaire?.categories.flatMap(c => c.questions) ?? [];
+  const currentQuestion = allQuestions[questionIndex];
+  const buttonOptions: string[] | null =
+    !sending && (currentQuestion?.expectedAnswers?.length ?? 0) > 0
+      ? currentQuestion.expectedAnswers
+      : null;
 
   const toggleOption = (option: string) => {
     setSelectedOptions(prev =>
@@ -189,7 +180,6 @@ Sois encourageant et bienveillant.${strictRules}`;
   const handleValidate = () => {
     if (selectedOptions.length === 0 || sending) return;
     handleSend(selectedOptions.join(', '));
-    setSelectedOptions([]);
   };
 
   const handleSend = async (content: string) => {
@@ -198,6 +188,8 @@ Sois encourageant et bienveillant.${strictRules}`;
     setSendError('');
     const userContent = content.trim();
     setInput('');
+    setSelectedOptions([]);
+    setQuestionIndex(prev => Math.min(prev + 1, allQuestions.length - 1));
     try {
       await addMessage(sessionId, 'user', userContent);
       const history: Array<{ role: string; content: string }> = [
@@ -334,9 +326,9 @@ Sois encourageant et bienveillant.${strictRules}`;
           <div ref={bottomRef} />
         </div>
 
-        {/* Zone d'interaction — mobile : boutons si options détectées, sinon textarea */}
+        {/* Zone d'interaction — boutons si la question courante a des choix, sinon textarea */}
         {buttonOptions ? (
-          <div className="sm:hidden border-t border-slate-200 bg-white pb-safe">
+          <div className="border-t border-slate-200 bg-white pb-safe">
             <div className={`px-3 pt-3 flex flex-col gap-2 ${buttonOptions.length > 4 ? 'max-h-60 overflow-y-auto' : ''}`}>
               {buttonOptions.map((option, i) => {
                 const isSelected = selectedOptions.includes(option);
@@ -370,8 +362,8 @@ Sois encourageant et bienveillant.${strictRules}`;
           </div>
         ) : null}
 
-        {/* Textarea — desktop toujours visible, mobile visible uniquement si pas de boutons */}
-        <div className={`${buttonOptions ? 'hidden sm:block' : ''} p-3 border-t border-slate-200 bg-white pb-safe`}>
+        {/* Textarea — visible uniquement si pas de boutons */}
+        <div className={`${buttonOptions ? 'hidden' : ''} p-3 border-t border-slate-200 bg-white pb-safe`}>
           <div className="flex gap-2 items-end">
             <textarea
               ref={textareaRef}
