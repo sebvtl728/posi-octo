@@ -2,7 +2,7 @@
 
 **Date :** 2026-06-19  
 **Scope :** `src/components/user/UserChat.tsx` — zone d'interaction en bas de l'écran  
-**Objectif :** Remplacer les chips de réponse rapide par de gros boutons tactiles adaptés au mobile, avec gestion du mode multi-sélection.
+**Objectif :** Remplacer les chips de réponse rapide par de gros boutons tactiles adaptés au mobile, avec gestion du mode multi-sélection. Corriger également la fuite des réponses attendues dans le prompt IA.
 
 ---
 
@@ -69,6 +69,30 @@ La détection tourne uniquement côté client, sans modification du prompt IA ni
 
 ---
 
+## Correction critique — fuite des réponses attendues dans le prompt IA
+
+**Problème :** `buildSystemPrompt` passe `JSON.stringify(questionnaire?.categories)` à l'IA, ce qui inclut le champ `expectedAnswers` de chaque question. L'IA voit donc les bonnes réponses et les révèle implicitement sous forme de conseils ou d'indices dans ses messages, ce qui annule l'intérêt du questionnaire.
+
+**Correction :**
+- Filtrer les catégories avant de les envoyer à l'IA : ne garder que `name` et `questions[].question` (supprimer `expectedAnswers` et `hint`)
+- Ajouter une consigne explicite dans le prompt : _"Ne révèle jamais les réponses attendues, ne suggère pas la bonne réponse, ne donne aucun indice orienté. Pose les questions telles quelles et laisse l'utilisateur répondre librement."_
+
+```ts
+// Avant (fuite des réponses)
+JSON.stringify(questionnaire?.categories, null, 2)
+
+// Après (filtré)
+JSON.stringify(
+  questionnaire?.categories.map(c => ({
+    name: c.name,
+    questions: c.questions.map(q => ({ question: q.question }))
+  })),
+  null, 2
+)
+```
+
+---
+
 ## Rendu des messages IA — suppression des coches markdown
 
 Le bot génère parfois des listes de cases cochées en markdown (`- [x] Option`) rendues par ReactMarkdown avec une coche verte. Ce rendu est **trompeur** : il suggère que la réponse est déjà sélectionnée alors que l'utilisateur n'a rien choisi.
@@ -100,4 +124,8 @@ Le layout actuel (`flex h-screen`) peut générer un scroll horizontal si un él
 
 ## Fichiers modifiés
 
-- `src/components/user/UserChat.tsx` : remplacement du bloc `quickReplies` et de la zone d'input par le nouveau système à 3 modes, correction scroll horizontal, neutralisation des checkboxes markdown
+- `src/components/user/UserChat.tsx` :
+  - Filtrage de `expectedAnswers` dans `buildSystemPrompt` + consigne anti-fuite dans le prompt
+  - Remplacement du bloc `quickReplies` et de la zone d'input par le nouveau système à 3 modes
+  - Correction scroll horizontal
+  - Neutralisation des checkboxes markdown dans les bulles du bot
