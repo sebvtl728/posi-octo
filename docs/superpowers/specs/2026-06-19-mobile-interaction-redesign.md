@@ -69,6 +69,25 @@ La détection tourne uniquement côté client, sans modification du prompt IA ni
 
 ---
 
+## Rendu des messages IA — suppression des coches markdown
+
+Le bot génère parfois des listes de cases cochées en markdown (`- [x] Option`) rendues par ReactMarkdown avec une coche verte. Ce rendu est **trompeur** : il suggère que la réponse est déjà sélectionnée alors que l'utilisateur n'a rien choisi.
+
+**Correction :** désactiver le composant `input` de type `checkbox` dans le rendu ReactMarkdown des messages `assistant`, en passant un `components` prop qui remplace `input[type=checkbox]` par `null` (ou un span neutre). Les options restent lisibles comme texte mais sans case cochée.
+
+---
+
+## Correction du scroll horizontal sur mobile
+
+Le layout actuel (`flex h-screen`) peut générer un scroll horizontal si un élément enfant dépasse la largeur du viewport (messages longs, conteneur sans `max-w`, etc.).
+
+**Corrections à appliquer sur le conteneur racine et la zone messages :**
+- Ajouter `overflow-x: hidden` sur le conteneur racine (`<div className="flex h-screen ...">`)
+- S'assurer que les bulles de messages ont bien `max-w-[78%]` ET `break-words` (`break-words overflow-wrap-anywhere`)
+- S'assurer que le rendu ReactMarkdown dans les bulles n'élargit pas la bulle (ajouter `overflow-hidden` sur le wrapper de la bulle assistant si nécessaire)
+
+---
+
 ## Ce qui ne change pas
 
 - Header, messages, typing indicator, gestion des erreurs : inchangés
@@ -79,6 +98,6 @@ La détection tourne uniquement côté client, sans modification du prompt IA ni
 
 ---
 
-## Fichier modifié
+## Fichiers modifiés
 
-- `src/components/user/UserChat.tsx` : remplacement du bloc `quickReplies` et de la zone d'input par le nouveau système à 3 modes
+- `src/components/user/UserChat.tsx` : remplacement du bloc `quickReplies` et de la zone d'input par le nouveau système à 3 modes, correction scroll horizontal, neutralisation des checkboxes markdown
