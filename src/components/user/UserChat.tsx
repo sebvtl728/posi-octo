@@ -271,7 +271,7 @@ Sois chaleureux, professionnel et rassurant. À la fin, annonce que l'entretien 
             return (
               <div key={msg.id ?? i} className={`flex mb-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
                 <div
-                  className={`max-w-[78%] px-4 py-2.5 rounded-2xl text-sm ${
+                  className={`max-w-[78%] px-4 py-2.5 rounded-2xl text-sm break-words min-w-0 ${
                     isUser
                       ? 'bg-indigo-600 text-white rounded-br-sm'
                       : 'bg-white border border-slate-200 text-slate-800 rounded-bl-sm'
@@ -280,8 +280,14 @@ Sois chaleureux, professionnel et rassurant. À la fin, annonce que l'entretien 
                   {isUser ? (
                     msg.content
                   ) : (
-                    <div className="prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    <div className="prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 overflow-hidden">
+                      <ReactMarkdown
+                        components={{
+                          input: () => null,
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
                     </div>
                   )}
                 </div>
