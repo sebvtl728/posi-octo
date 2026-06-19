@@ -103,10 +103,21 @@ Sois chaleureux, professionnel et rassurant. À la fin, annonce que l'entretien 
 
     const categoriesForAI = questionnaire?.categories.map(c => ({
       name: c.name,
-      questions: c.questions.map((q: { question: string }) => ({ question: q.question })),
+      questions: c.questions.map((q: { question: string; hint?: string }) => ({
+        question: q.question,
+        ...(q.hint ? { hint: q.hint } : {}),
+      })),
     }));
 
-    return `Tu es TypBot, un assistant IA qui guide des utilisateurs à travers un questionnaire interactif. Le questionnaire s'appelle "${questionnaire?.title}". Voici les catégories et questions :\n\n${JSON.stringify(categoriesForAI, null, 2)}\n\nSois bienveillant et encourageant.${strictRules}`;
+    return `Tu es TypBot, un assistant IA qui prépare ${userName} à une soutenance orale sur le thème "${questionnaire?.title}". Tu poses des questions de soutenance à ${userName} pour l'entraîner.
+
+Voici les catégories et sujets à aborder :\n\n${JSON.stringify(categoriesForAI, null, 2)}
+
+Important : les champs "question" dans ce JSON sont des **thèmes ou mots-clés**, pas des phrases interrogatives. Tu dois reformuler chaque thème en une vraie question orale de soutenance, naturelle et pédagogique (ex : "Format papier" → "Quels sont les formats papier standard que tu connais ?").
+
+Si un champ "hint" est présent, utilise-le pour orienter la formulation de ta question — sans en révéler le contenu à ${userName}.
+
+Sois encourageant et bienveillant.${strictRules}`;
   };
 
   const triggerWelcome = async (userName: string) => {
