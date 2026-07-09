@@ -7,15 +7,19 @@ import { db } from './firebase';
 import type { Session, Message } from '../types';
 
 export async function createSession(
-  questionnaireId: string,
+  questionnaireId: string | undefined,
   type: Session['type'],
   userName = '',
-  initialStatus: Session['status'] = 'pending'
+  initialStatus: Session['status'] = 'pending',
+  entryTemplateId?: string,
+  exitTemplateId?: string
 ): Promise<string> {
   const id = uuidv4();
   await setDoc(doc(db, 'sessions', id), {
     id,
-    questionnaireId,
+    ...(questionnaireId ? { questionnaireId } : {}),
+    ...(entryTemplateId ? { entryTemplateId } : {}),
+    ...(exitTemplateId ? { exitTemplateId } : {}),
     userName,
     type,
     status: initialStatus,

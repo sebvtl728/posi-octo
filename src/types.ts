@@ -28,16 +28,29 @@ export interface QuestionnaireData {
   }[];
 }
 
+export interface HTMLTemplate {
+  id: string;
+  name: string;
+  htmlContent: string;
+  type: 'entry_self_assessment' | 'exit_assessment';
+  createdAt: string;
+}
+
 export interface Session {
   id: string;
-  questionnaireId: string;
+  questionnaireId?: string;
   userName: string;
-  type: 'individual' | 'collective' | 'positioning';
+  type: 'individual' | 'collective' | 'positioning' | 'entry_self_assessment' | 'exit_assessment';
   status: 'pending' | 'active' | 'completed';
   createdAt: string;
   completedAt?: string;
   currentQuestionIndex?: number;
   scores?: Record<string, number>;
+  formData?: Record<string, any>;
+  signatureData?: string;
+  signatureDate?: string;
+  entryTemplateId?: string;
+  exitTemplateId?: string;
 }
 
 export interface Message {

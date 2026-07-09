@@ -5,6 +5,7 @@ import { adminLogout } from '../../lib/auth';
 const navItems = [
   { to: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/admin/questionnaires', icon: FileText, label: 'Questionnaires' },
+  { to: '/admin/templates', icon: FileText, label: 'Bibliothèque Fiches' },
   { to: '/admin/positioning', icon: Target, label: 'Positionnement' },
   { to: '/admin/sessions', icon: Users, label: 'Sessions' },
 ];

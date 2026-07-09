@@ -22,5 +22,10 @@ service cloud.firestore {
         allow read, write: if true;
       }
     }
+
+    // Templates HTML : lecture/écriture
+    match /templates/{id} {
+      allow read, write: if true;
+    }
   }
 }

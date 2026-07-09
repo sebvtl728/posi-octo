@@ -5,3 +5,7 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
+
+#root {
+  margin: 0 auto;
+}
