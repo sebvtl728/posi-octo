@@ -154,7 +154,7 @@ export async function computePositioningSynthesis(
 ): Promise<string> {
   const transcript = messages
     .slice(-30)
-    .map(m => `${m.role === 'user' ? session.userName : 'TypBot'}: ${m.content}`)
+    .map(m => `${m.role === 'user' ? session.userName : 'Emy'}: ${m.content}`)
     .join('\n\n');
 
   const prompt = `Tu es expert Qualiopi. Sur la base de cet entretien de positionnement, rédige une fiche synthétique structurée en 4 points :
@@ -191,7 +191,7 @@ export function generatePositioningHTML(
 
   const transcriptHTML = messages
     .map(m => {
-      const name = m.role === 'user' ? session.userName : 'TypBot';
+      const name = m.role === 'user' ? session.userName : 'Emy';
       const cls = m.role === 'user' ? 'user' : 'assistant';
       const escaped = m.content
         .replace(/&/g, '&amp;')
@@ -203,19 +203,40 @@ export function generatePositioningHTML(
     .join('');
 
   const synthesisEscaped = synthesis.replace(/\n/g, '<br>');
+  const isSoutenance = questionnaireTitle.toLowerCase().includes('soutenance') || questionnaireTitle.toLowerCase().includes('revision') || questionnaireTitle.toLowerCase().includes('oral');
+  
+  const docTitle = isSoutenance 
+    ? `Fiche de révision — ${session.userName}`
+    : `Fiche de positionnement — ${session.userName}`;
+    
+  const subTitle = isSoutenance 
+    ? `FICHE DE RÉVISION POUR LE PARCOURS (QUESTION DE SOUTENANCE)`
+    : `FICHE DE POSITIONNEMENT QUALIOPI`;
+
+  const badgesHTML = isSoutenance
+    ? `
+      <span class="badge">Soutenance Orale</span>
+      <span class="badge">Questions de révision</span>
+      <span class="badge">Préparation Jury</span>
+    `
+    : `
+      <span class="badge">Indicateur I5 — Acquis &amp; attentes</span>
+      <span class="badge">Indicateur I6 — Besoins spécifiques</span>
+      <span class="badge">Indicateur I9 — Prérequis</span>
+    `;
 
   return `<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Fiche de positionnement — ${session.userName}</title>
+<title>${docTitle}</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"><\/script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, -apple-system, sans-serif; max-width: 860px; margin: 0 auto; padding: 48px 24px; color: #1e293b; line-height: 1.6; }
   .header-band { background: #1e1b4b; color: white; padding: 28px 32px; border-radius: 14px; margin-bottom: 36px; }
   .header-band h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
-  .header-band .sub { color: #a5b4fc; font-size: 13px; }
+  .header-band .sub { color: #a5b4fc; font-size: 13px; text-transform: uppercase; }
   .badges { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
   .badge { background: rgba(165,180,252,0.2); border: 1px solid rgba(165,180,252,0.4); color: #c7d2fe; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
   .meta-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 36px; }
@@ -238,14 +259,14 @@ export function generatePositioningHTML(
 </style>
 </head>
 <body>
-
+ 
 <div class="header-band">
-  <div class="sub">FICHE DE POSITIONNEMENT QUALIOPI</div>
+  <div class="sub">${subTitle}</div>
   <h1>${session.userName}</h1>
   <div class="badges">
-    <span class="badge">Indicateur I5 — Acquis &amp; attentes</span>
-    <span class="badge">Indicateur I6 — Besoins spécifiques</span>
-    <span class="badge">Indicateur I9 — Prérequis</span>
+    ${badgesHTML}
+  </div>
+</div>
   </div>
 </div>
 

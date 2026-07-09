@@ -53,6 +53,7 @@ export interface Session {
   exitTemplateId?: string;
   entryCompleted?: boolean;
   entryCompletedAt?: string;
+  isArchived?: boolean;
 }
 
 export interface Message {

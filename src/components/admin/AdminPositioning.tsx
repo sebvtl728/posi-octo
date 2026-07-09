@@ -4,7 +4,7 @@ import { subscribeToSessions, createSession, updateSession, deleteSession, delet
 import { subscribeToQuestionnaires } from '../../lib/questionnaire';
 import { subscribeToTemplates } from '../../lib/templates';
 import QRCodePanel from '../shared/QRCodePanel';
-import { FileText, Trash2 } from 'lucide-react';
+import { FileText, Archive } from 'lucide-react';
 import type { Session, Questionnaire, HTMLTemplate } from '../../types';
 
 type Filter = 'all' | Session['status'];
@@ -24,6 +24,7 @@ export default function AdminPositioning() {
   const [questionnaires, setQuestionnaires] = useState<Questionnaire[]>([]);
   const [templates, setTemplates] = useState<HTMLTemplate[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
+  const [showArchived, setShowArchived] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [learnerName, setLearnerName] = useState('');
   const [selectedQId, setSelectedQId] = useState('');
@@ -58,7 +59,10 @@ export default function AdminPositioning() {
     return () => { unsubSessions(); unsubQ(); unsubT(); };
   }, []);
 
-  const sessions = allSessions.filter(s => ['positioning', 'entry_self_assessment', 'exit_assessment'].includes(s.type));
+  const sessions = allSessions.filter(s => 
+    ['positioning', 'entry_self_assessment', 'exit_assessment'].includes(s.type) &&
+    (showArchived ? !!s.isArchived : !s.isArchived)
+  );
   const filtered = filter === 'all' ? sessions : sessions.filter(s => s.status === filter);
 
   const handleCreate = async () => {
@@ -133,6 +137,18 @@ export default function AdminPositioning() {
               </button>
             ))}
           </div>
+          <button
+            onClick={() => setShowArchived(prev => !prev)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors border ${
+              showArchived
+                ? 'bg-amber-600 border-amber-600 text-white hover:bg-amber-700'
+                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+            title={showArchived ? "Afficher les sessions actives" : "Afficher les archives"}
+          >
+            <Archive className="w-3.5 h-3.5" />
+            {showArchived ? 'Voir les Actives' : 'Voir les Archives'}
+          </button>
           <button
             onClick={openModal}
             className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 transition-colors"
@@ -261,18 +277,22 @@ export default function AdminPositioning() {
                       
                       <button
                         onClick={async () => {
-                          if (confirm(`Voulez-vous supprimer définitivement la session de "${s.userName}" ?`)) {
+                          const nextState = !s.isArchived;
+                          const msg = nextState 
+                            ? `Voulez-vous archiver la session de "${s.userName}" ?`
+                            : `Voulez-vous restaurer/désarchiver la session de "${s.userName}" ?`;
+                          if (confirm(msg)) {
                             try {
-                              await deleteSession(s.id);
+                              await updateSession(s.id, { isArchived: nextState });
                             } catch (e) {
                               console.error(e);
                             }
                           }
                         }}
-                        className="text-xs text-red-600 hover:text-red-800 font-semibold hover:underline border-l border-slate-200 pl-3"
-                        title="Supprimer la session"
+                        className={`text-slate-400 hover:text-indigo-600 transition-colors p-1.5 rounded-lg border-l border-slate-200 pl-3 ml-2 flex items-center justify-center shrink-0 ${s.isArchived ? 'text-amber-600 hover:text-amber-800' : ''}`}
+                        title={s.isArchived ? "Désarchiver la session (restaurer)" : "Archiver la session"}
                       >
-                        Supprimer
+                        <Archive className="w-4 h-4" />
                       </button>
                     </td>
                   </tr>

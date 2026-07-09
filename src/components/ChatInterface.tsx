@@ -275,7 +275,7 @@ export default function ChatInterface({ sessionId, onLeave }: ChatInterfaceProps
         // Options
         const opt = {
           margin:       10,
-          filename:     `TypBot-Session-${sessionId}.pdf`,
+          filename:     `Emy-Session-${sessionId}.pdf`,
           image:        { type: 'jpeg' as const, quality: 0.98 },
           html2canvas:  { scale: 2 },
           jsPDF:        { unit: 'mm' as const, format: 'a4', orientation: 'portrait' as const }
@@ -290,7 +290,7 @@ export default function ChatInterface({ sessionId, onLeave }: ChatInterfaceProps
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `TypBot-Session-${sessionId}.md`;
+    link.download = `Emy-Session-${sessionId}.md`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -305,7 +305,7 @@ export default function ChatInterface({ sessionId, onLeave }: ChatInterfaceProps
               <ArrowLeft className="w-4 h-4" />
             </button>
             <div className="w-3 h-3 bg-indigo-500 rounded-full"></div>
-            <h1 className="font-bold text-lg tracking-tight">TypBot</h1>
+            <h1 className="font-bold text-lg tracking-tight">Emy</h1>
           </div>
           <p className="text-xs text-slate-400">SV Analyse de Soutenance</p>
         </div>

@@ -36,6 +36,23 @@ export default function UserChat() {
   const [submittingName, setSubmittingName] = useState(false);
   const welcomeTriggeredRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const allQuestions = questionnaire?.categories.flatMap(c => 
+    c.questions.map((q: any) => {
+      if (typeof q === 'string') {
+        return {
+          question: q,
+          expectedAnswers: [] as string[],
+          hint: ''
+        };
+      }
+      return {
+        question: q.question || q.title || '',
+        expectedAnswers: (q.expectedAnswers || (q.correctAnswer ? [q.correctAnswer] : (q.correctAnswers ? q.correctAnswers : []))) as string[],
+        hint: q.hint || ''
+      };
+    })
+  ) ?? [];
 
   useEffect(() => {
     if (!sessionId) return;
@@ -83,8 +100,8 @@ Règles absolues :
 - N'utilise le prénom de l'utilisateur qu'occasionnellement, pas dans chaque message.
 - Ne commence JAMAIS tes messages par "Merci pour ta réponse" ou une formule similaire. Varie tes feedbacks : commente directement ce qui a été dit, corrige si nécessaire, puis enchaîne naturellement vers la question suivante.`;
 
-    if (session?.type === 'positioning') {
-      return `Tu es TypBot, un assistant de positionnement Qualiopi. Avant la formation "${questionnaire?.title}", tu conduis un entretien de positionnement individuel avec ${userName} pour évaluer son niveau initial et identifier ses besoins, conformément aux indicateurs I5, I6 et I9 du référentiel Qualiopi 2021.
+    if (session?.type === 'positioning' && allQuestions.length === 0) {
+      return `Tu es Emy, une assistante de positionnement Qualiopi. Avant la formation "${questionnaire?.title}", tu conduis un entretien de positionnement individuel avec ${userName} pour évaluer son niveau initial et identifier ses besoins, conformément aux indicateurs I5, I6 et I9 du référentiel Qualiopi 2021.
 
 Explore avec bienveillance, en posant UNE question à la fois :
 - Ses acquis et connaissances actuelles dans les domaines abordés (I5)
@@ -99,21 +116,34 @@ Sois chaleureux, professionnel et rassurant. À la fin, annonce que l'entretien 
 
     const categoriesForAI = questionnaire?.categories.map(c => ({
       name: c.name,
-      questions: c.questions.map((q: { question: string; expectedAnswers?: string[]; hint?: string }) => ({
-        question: q.question,
-        expectedAnswers: q.expectedAnswers ?? [],
-        ...(q.hint ? { hint: q.hint } : {}),
-      })),
+      questions: c.questions.map((q: any) => {
+        if (typeof q === 'string') {
+          return {
+            question: q,
+            expectedAnswers: []
+          };
+        }
+        return {
+          question: q.question || q.title || '',
+          expectedAnswers: q.expectedAnswers || (q.correctAnswer ? [q.correctAnswer] : (q.correctAnswers ? q.correctAnswers : [])),
+          ...(q.hint ? { hint: q.hint } : {})
+        };
+      }),
     }));
 
-    return `Tu es un examinateur pédagogique qui prépare ${userName} à une soutenance orale sur "${questionnaire?.title}".
+    return `Tu es Emy, une examinatrice pédagogique qui prépare ${userName} à une soutenance orale sur "${questionnaire?.title}".
 
-Voici les questions à poser dans l'ordre :\n\n${JSON.stringify(categoriesForAI, null, 2)}
+Voici la liste des questions dans l'ordre exact :
+${JSON.stringify(categoriesForAI, null, 2)}
 
-Les champs "question" sont des thèmes ou mots-clés. Reformule chaque thème en une vraie question orale, précise et pédagogique.
-Les "expectedAnswers" sont pour ton évaluation uniquement — ne les cite pas dans tes questions.
-Si un "hint" est présent, utilise-le pour mieux formuler ta question.
-Après chaque réponse, donne un feedback court et direct (correct/incomplet/incorrect), puis pose la question suivante.${strictRules}`;
+Consignes importantes pour formuler les questions :
+- Analyse attentivement chaque énoncé de question :
+  * Si l'énoncé est un simple thème, un mot-clé, une abréviation ou une phrase incomplète (ex: "Format papier", "Q DPI ou PPP", "CMJN", "trais de coupe", "Raccourci transformation", "Q DPI ou PPP Q2"), tu dois OBLIGATOIREMENT le transformer en une question orale complète, bien formulée, fluide, claire et compréhensible pour l'élève (ex: pour "Q DPI ou PPP", formule : "Que signifient les sigles DPI ou PPP en design graphique et quelle est leur utilité ?" ; pour "CMJN", formule : "Pouvez-vous m'expliquer ce qu'est le mode colorimétrique CMJN et pourquoi on l'utilise en impression ?").
+  * Si l'énoncé est déjà une question rédigée et parfaitement claire (ex: "Quelle est la différence entre un fichier et un dossier ?"), pose-la telle quelle ou en l'adaptant très légèrement pour qu'elle reste fluide à l'oral.
+- Les "expectedAnswers" associées à chaque question sont pour ton évaluation uniquement — ne les cite pas dans tes questions et ne les révèle pas à l'apprenant.
+- Si un "hint" est présent, utilise-le uniquement comme guide d'évaluation ou indice constructif si l'apprenant rencontre des difficultés.
+- Prends impérativement le temps de réfléchir, d'analyser et d'évaluer la réponse de l'apprenant, tout particulièrement lorsqu'il s'agit d'une réponse sous forme de texte libre (open text). Ne valide pas trop vite une réponse si elle est superficielle, incomplète ou à côté du sujet. Sois rigoureuse dans ton évaluation pédagogique, commente ce qui est correct et ce qui manque avec précision.
+- Après chaque réponse de l'apprenant, donne un feedback court (2 à 3 phrases maximum), direct, bienveillant et constructif (correct/incomplet/incorrect), puis enchaîne immédiatement en posant la question suivante de la liste.${strictRules}`;
   };
 
   const triggerWelcome = async (userName: string) => {
@@ -125,13 +155,13 @@ Après chaque réponse, donne un feedback court et direct (correct/incomplet/inc
       const history: Array<{ role: string; content: string }> = [
         { role: 'system', content: systemPrompt },
       ];
-      const welcomeContent = session?.type === 'positioning'
+      const welcomeContent = session?.type === 'positioning' && allQuestions.length === 0
         ? `L'apprenant s'appelle ${userName}. Présente-toi, explique brièvement le but de cet entretien de positionnement Qualiopi, rassure ${userName} que ce n'est pas un examen, puis commence par explorer son contexte et ses acquis actuels.`
-        : `L'utilisateur s'appelle ${userName}. Lance le questionnaire en te présentant, en souhaitant la bienvenue à ${userName}, puis pose la première question du questionnaire.`;
+        : `L'utilisateur s'appelle ${userName}. Présente-toi chaleureusement en tant qu'Emy, souhaite-lui la bienvenue pour ce questionnaire sur "${questionnaire?.title}", puis pose la première question de la liste : "${allQuestions[0]?.question}" en appliquant tes consignes de reformulation.`;
       const welcomeMsg = await chatWithMistral([
         ...history,
         { role: 'user', content: welcomeContent },
-      ]);
+      ], 'mistral-large-latest');
       await addMessage(sessionId, 'assistant', welcomeMsg);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erreur de connexion à l\'IA.';
@@ -154,7 +184,6 @@ Après chaque réponse, donne un feedback court et direct (correct/incomplet/inc
 
   const [sendError, setSendError] = useState('');
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
-  const [questionIndex, setQuestionIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const resizeTextarea = useCallback(() => {
@@ -164,7 +193,6 @@ Après chaque réponse, donne un feedback court et direct (correct/incomplet/inc
     ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
   }, []);
 
-  const allQuestions = questionnaire?.categories.flatMap(c => c.questions) ?? [];
   const currentQuestion = allQuestions[questionIndex];
   const buttonOptions: string[] | null =
     !sending && (currentQuestion?.expectedAnswers?.length ?? 0) > 0
@@ -189,15 +217,29 @@ Après chaque réponse, donne un feedback court et direct (correct/incomplet/inc
     const userContent = content.trim();
     setInput('');
     setSelectedOptions([]);
+
+    const answeredQuestion = allQuestions[questionIndex];
+    const nextQuestion = allQuestions[questionIndex + 1];
+
     setQuestionIndex(prev => Math.min(prev + 1, allQuestions.length - 1));
     try {
       await addMessage(sessionId, 'user', userContent);
+      
+      let stateInstruction = '';
+      if (allQuestions.length > 0) {
+        if (nextQuestion) {
+          stateInstruction = `\n\n[Instruction système cruciale : L'apprenant vient de répondre à la question : "${answeredQuestion.question}". Analyse sa réponse, évalue si elle est correcte/incomplète/incorrecte par rapport aux attendus "${(answeredQuestion.expectedAnswers ?? []).join(', ')}", fais un retour court et constructif, puis pose la question suivante : "${nextQuestion.question}" en appliquant impérativement tes consignes de reformulation (s'il s'agit d'un mot-clé ou d'une abréviation, transforme-le en une question orale claire, complète et rédigée). Ne pose aucune autre question.]`;
+        } else {
+          stateInstruction = `\n\n[Instruction système cruciale : L'apprenant vient de répondre à la dernière question : "${answeredQuestion.question}". Analyse sa réponse, évalue-la, fais un retour court et constructif, puis annonce clairement que la soutenance est maintenant terminée. Ne pose plus aucune question.]`;
+        }
+      }
+
       const history: Array<{ role: string; content: string }> = [
         { role: 'system', content: buildSystemPrompt(session?.userName ?? '') },
         ...messages.map(m => ({ role: m.role, content: m.content })),
-        { role: 'user', content: userContent },
+        { role: 'user', content: userContent + stateInstruction },
       ];
-      const reply = await chatWithMistral(history);
+      const reply = await chatWithMistral(history, 'mistral-large-latest');
       await addMessage(sessionId, 'assistant', reply);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erreur de connexion à l\'IA.';
