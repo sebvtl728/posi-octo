@@ -12,10 +12,10 @@ type Filter = 'all' | Session['status'];
 function StatusBadge({ status }: { status: Session['status'] }) {
   const map = {
     pending: 'bg-yellow-100 text-yellow-700',
-    active: 'bg-green-100 text-green-700',
-    completed: 'bg-slate-100 text-slate-600',
+    active: 'bg-indigo-100 text-indigo-700',
+    completed: 'bg-green-100 text-green-700',
   };
-  const labels = { pending: 'En attente', active: '● Actif', completed: 'Terminé' };
+  const labels = { pending: 'En attente', active: 'En cours', completed: 'Terminé' };
   return <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${map[status]}`}>{labels[status]}</span>;
 }
 
@@ -193,12 +193,39 @@ export default function AdminPositioning() {
                     </td>
                     <td className="px-6 py-3 flex items-center gap-3">
                       {s.type === 'positioning' ? (
-                        <button
-                          onClick={() => navigate(`/admin/positioning/${s.id}`, { state: { from: '/admin/positioning' } })}
-                          className="text-indigo-500 hover:underline"
-                        >
-                          {s.status === 'completed' ? 'Fiche Qualiopi' : 'Suivre'}
-                        </button>
+                        <>
+                          <button
+                            onClick={() => navigate(`/admin/positioning/${s.id}`, { state: { from: '/admin/positioning' } })}
+                            className="text-indigo-500 hover:underline"
+                          >
+                            {s.status === 'completed' ? 'Fiche Qualiopi' : 'Suivre'}
+                          </button>
+                          {s.status === 'pending' && (
+                            <>
+                              <button
+                                onClick={() => setQrSession(s)}
+                                className="text-[10px] text-indigo-400 hover:text-indigo-600 underline"
+                              >
+                                QR / Lien
+                              </button>
+                              <button
+                                onClick={() => openEdit(s)}
+                                className="text-[10px] text-slate-400 hover:text-slate-600 underline"
+                              >
+                                Modifier
+                              </button>
+                            </>
+                          )}
+                        </>
+                      ) : s.type === 'entry_self_assessment' && !s.entryCompleted ? (
+                        <>
+                          <button
+                            onClick={() => setQrSession(s)}
+                            className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold hover:underline"
+                          >
+                            QR / Lien (Apprenant)
+                          </button>
+                        </>
                       ) : (
                         <div className="flex items-center gap-2">
                           <button
@@ -221,25 +248,15 @@ export default function AdminPositioning() {
                           >
                             <FileText className="w-5 h-5" />
                           </button>
-                        </div>
-                      )}
-                      {s.status === 'pending' && (
-                        <>
-                          <button
-                            onClick={() => setQrSession(s)}
-                            className="text-[10px] text-indigo-400 hover:text-indigo-600 underline"
-                          >
-                            QR / Lien
-                          </button>
-                          {s.type === 'positioning' && (
+                          {s.status !== 'completed' && (
                             <button
-                              onClick={() => openEdit(s)}
-                              className="text-[10px] text-slate-400 hover:text-slate-600 underline"
+                              onClick={() => setQrSession(s)}
+                              className="text-[10px] text-slate-400 hover:text-slate-600 underline ml-1"
                             >
-                              Modifier
+                              Lien
                             </button>
                           )}
-                        </>
+                        </div>
                       )}
                       
                       <button
@@ -401,7 +418,7 @@ export default function AdminPositioning() {
               <p className="text-[10px] text-slate-400">Sélectionnez le lien à copier ou flasher.</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+            <div className={`grid gap-6 w-full ${(qrSession.entryCompleted || qrSession.type !== 'entry_self_assessment') ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 max-w-xs'}`}>
               {/* Apprenant Link */}
               <div className="flex flex-col items-center p-3 border border-slate-100 rounded-xl bg-slate-50/50">
                 <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-wider mb-2">Lien Apprenant</span>
@@ -429,23 +446,25 @@ export default function AdminPositioning() {
               </div>
 
               {/* Formateur Link */}
-              <div className="flex flex-col items-center p-3 border border-slate-100 rounded-xl bg-slate-50/50">
-                <span className="text-[9px] font-bold text-amber-700 uppercase tracking-wider mb-2">Lien Formateur</span>
-                <QRCodePanel
-                  url={`${window.location.origin}/admin/exit-assessment/${qrSession.id}`}
-                  size={120}
-                  label="Flasher pour le Bilan & Radar"
-                />
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/admin/exit-assessment/${qrSession.id}`);
-                    alert('Lien formateur copié !');
-                  }}
-                  className="mt-3 text-[10px] px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold rounded-lg transition-colors w-full"
-                >
-                  Copier le lien
-                </button>
-              </div>
+              {(qrSession.entryCompleted || qrSession.type !== 'entry_self_assessment') && (
+                <div className="flex flex-col items-center p-3 border border-slate-100 rounded-xl bg-slate-50/50">
+                  <span className="text-[9px] font-bold text-amber-700 uppercase tracking-wider mb-2">Lien Formateur</span>
+                  <QRCodePanel
+                    url={`${window.location.origin}/admin/exit-assessment/${qrSession.id}`}
+                    size={120}
+                    label="Flasher pour le Bilan & Radar"
+                  />
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/admin/exit-assessment/${qrSession.id}`);
+                      alert('Lien formateur copié !');
+                    }}
+                    className="mt-3 text-[10px] px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold rounded-lg transition-colors w-full"
+                  >
+                    Copier le lien
+                  </button>
+                </div>
+              )}
             </div>
 
             <button onClick={() => setQrSession(null)} className="text-xs text-slate-400 hover:text-slate-600 hover:underline">Fermer</button>

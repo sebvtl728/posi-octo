@@ -4,7 +4,8 @@ import { subscribeToSession, updateSession } from '../../lib/sessions';
 import { getTemplateById } from '../../lib/templates';
 import type { Session, HTMLTemplate } from '../../types';
 import DynamicFormRenderer from '../shared/DynamicFormRenderer';
-import { Check, Info, ArrowLeft, RefreshCw, Trash2, FileText } from 'lucide-react';
+import { Check, Info, ArrowLeft, RefreshCw, Trash2, FileText, Sparkles, TrendingUp } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
 interface CompItem {
   id: number;
@@ -73,14 +74,14 @@ const COMPETENCIES: CompItem[] = [
   }
 ];
 
-function RadarChart({ autoData, refData }: { autoData: number[]; refData: number[] }) {
-  const size = 300;
+function RadarChart({ labels, autoData, refData }: { labels: string[]; autoData: number[]; refData: number[] }) {
+  const size = 500;
   const center = size / 2;
-  const rMax = 100;
-  const labels = ['C1 Outils', 'C2 Prompt', 'C3 Sécurité', 'C4 Accessibilité', 'C5 Optim.', 'C6 Éthique'];
-  const points = labels.map((_, i) => {
-    const angle = (i * 2 * Math.PI) / 6 - Math.PI / 2;
-    return { x: Math.cos(angle), y: Math.sin(angle), label: labels[i] };
+  const rMax = 110;
+  const count = labels.length;
+  const points = labels.map((label, i) => {
+    const angle = (i * 2 * Math.PI) / count - Math.PI / 2;
+    return { x: Math.cos(angle), y: Math.sin(angle), label };
   });
 
   const getPath = (data: number[]) => {
@@ -91,7 +92,7 @@ function RadarChart({ autoData, refData }: { autoData: number[]; refData: number
   };
 
   return (
-    <svg width="100%" height="100%" viewBox={`0 0 ${size} ${size}`} className="mx-auto max-w-[320px]">
+    <svg width="100%" height="100%" viewBox={`0 0 ${size} ${size}`} className="mx-auto max-w-[480px]">
       {[1, 2, 3, 4].map((ring) => {
         const radius = (ring / 4) * rMax;
         return (
@@ -110,12 +111,12 @@ function RadarChart({ autoData, refData }: { autoData: number[]; refData: number
       <path d={getPath(autoData)} fill="rgba(83, 74, 183, 0.12)" stroke="#534ab7" strokeWidth="2" />
       <path d={getPath(refData)} fill="rgba(133, 79, 11, 0.08)" stroke="#854f0b" strokeWidth="2" />
       {points.map((p, i) => {
-        const offset = 22;
+        const offset = 25;
         let textAnchor: 'end' | 'inherit' | 'middle' | 'start' = 'middle';
         if (p.x > 0.2) textAnchor = 'start';
         if (p.x < -0.2) textAnchor = 'end';
         return (
-          <text key={i} x={center + p.x * (rMax + offset)} y={center + p.y * (rMax + offset) + 4} fontSize="9" fontWeight="bold" fill="#475569" textAnchor={textAnchor}>
+          <text key={i} x={center + p.x * (rMax + offset)} y={center + p.y * (rMax + offset) + 4} fontSize="8.5" fontWeight="bold" fill="#475569" textAnchor={textAnchor}>
             {p.label}
           </text>
         );
@@ -130,10 +131,12 @@ export default function AdminExitAssessment() {
   const [session, setSession] = useState<Session | null>(null);
   const [entryTemplate, setEntryTemplate] = useState<HTMLTemplate | null>(null);
   const [exitTemplate, setExitTemplate] = useState<HTMLTemplate | null>(null);
-  const tabParam = new URLSearchParams(window.location.search).get('tab') as 'entry' | 'exit' | null;
-  const [activeTab, setActiveTab] = useState<'entry' | 'exit'>(tabParam || 'exit');
+  const tabParam = new URLSearchParams(window.location.search).get('tab') as 'entry' | 'exit' | 'ai' | null;
+  const [activeTab, setActiveTab] = useState<'entry' | 'exit' | 'ai'>(tabParam || 'exit');
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [generatingAI, setGeneratingAI] = useState(false);
+  const [aiError, setAiError] = useState('');
 
   // Static Form Canvas Signature
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -204,10 +207,12 @@ export default function AdminExitAssessment() {
     if (!loading && printMode && session && !hasPrintedRef.current) {
       const templateName = activeTab === 'entry'
         ? (entryTemplate?.name || 'autopositionnement')
+        : activeTab === 'ai'
+        ? 'synthese-radar'
         : (exitTemplate?.name || 'bilan');
       document.title = formatPDFFileName(session.userName, templateName);
 
-      if (!exitTemplate) {
+      if (!exitTemplate || activeTab === 'ai') {
         const triggerFallbackPrint = () => {
           if (document.hasFocus()) {
             hasPrintedRef.current = true;
@@ -280,6 +285,8 @@ export default function AdminExitAssessment() {
     }
   };
 
+
+
   // Fallback canvas drawing handlers
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     if (isCompleted) return;
@@ -347,8 +354,203 @@ export default function AdminExitAssessment() {
 
   const formData = session.formData || {};
   const isCompleted = session.status === 'completed';
-  const autoData = COMPETENCIES.map(c => Number(formData[`s${c.id + 1}a`] || formData[`tool_${c.id + 1}_rating`] || 0));
-  const refData = COMPETENCIES.map(c => Number(formData[`c${c.id + 1}r`] || 0));
+  const mapValueToScore = (val: any): number => {
+    if (!val) return 0;
+    const s = String(val)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+    if (s.includes('inconnu') || s.includes('non acquis') || s === '1' || s === '−') return 1;
+    if (s.includes('notion') || s.includes('en cours') || s === '2' || s === '−/+') return 2;
+    if (s.includes('connu') || s.includes('acquis') || s === '3' || s === '+') return 3;
+    if (s.includes('appliqu') || s.includes('maitris') || s === '4' || s === '++') return 4;
+    return 0;
+  };
+
+  const parseTemplateSections = (htmlContent: string) => {
+    const sections: { title: string; itemCount: number }[] = [];
+    const sectionRegex = /title:\s*['"]([^'"]+)['"]\s*,\s*items:\s*\[([\s\S]*?)\]/g;
+    let match;
+    
+    while ((match = sectionRegex.exec(htmlContent)) !== null) {
+      const title = match[1];
+      const itemsContent = match[2];
+      
+      const cleanContent = itemsContent.replace(/\\'/g, '').replace(/\\"/g, '');
+      let stringRegex = /"([^"]+)"/g;
+      if (!/"[^"]+"/.test(cleanContent)) {
+        stringRegex = /'([^']+)'/g;
+      }
+      
+      let stringMatch;
+      let itemCount = 0;
+      while ((stringMatch = stringRegex.exec(cleanContent)) !== null) {
+        itemCount++;
+      }
+      
+      if (itemCount > 0) {
+        sections.push({ title, itemCount });
+      }
+    }
+    return sections;
+  };
+
+  const parsedSections = exitTemplate 
+    ? parseTemplateSections(exitTemplate.htmlContent || '')
+    : entryTemplate 
+    ? parseTemplateSections(entryTemplate.htmlContent || '')
+    : [];
+
+  const hasDynamicSections = parsedSections.length > 0;
+
+  let labels = ['C1 Outils', 'C2 Prompt', 'C3 Sécurité', 'C4 Accessibilité', 'C5 Optim.', 'C6 Éthique'];
+  let autoData = [0, 0, 0, 0, 0, 0];
+  let refData = [0, 0, 0, 0, 0, 0];
+  if (hasDynamicSections) {
+    labels = parsedSections.map((s, idx) => `${idx + 1}. ${s.title}`);
+    
+    let currentCriteriaIndex = 0;
+    autoData = parsedSections.map(s => {
+      let sum = 0;
+      let count = 0;
+      for (let i = 0; i < s.itemCount; i++) {
+        currentCriteriaIndex++;
+        const key = `critere-${String(currentCriteriaIndex).padStart(2, '0')}`;
+        const val = formData[`entry_${key}`] !== undefined ? formData[`entry_${key}`] : formData[key];
+        const score = mapValueToScore(val);
+        if (score > 0) {
+          sum += score;
+          count++;
+        }
+      }
+      return count > 0 ? Number((sum / count).toFixed(2)) : 0;
+    });
+
+    currentCriteriaIndex = 0;
+    refData = parsedSections.map(s => {
+      let sum = 0;
+      let count = 0;
+      for (let i = 0; i < s.itemCount; i++) {
+        currentCriteriaIndex++;
+        const key = `critere-${String(currentCriteriaIndex).padStart(2, '0')}`;
+        const val = formData[key];
+        const score = mapValueToScore(val);
+        if (score > 0) {
+          sum += score;
+          count++;
+        }
+      }
+      return count > 0 ? Number((sum / count).toFixed(2)) : 0;
+    });
+  } else {
+    autoData = COMPETENCIES.map(c => {
+      const val = formData[`entry_s${c.id + 1}a`] !== undefined 
+        ? formData[`entry_s${c.id + 1}a`] 
+        : formData[`entry_tool_${c.id + 1}_rating`] !== undefined
+        ? formData[`entry_tool_${c.id + 1}_rating`]
+        : formData[`s${c.id + 1}a`] || formData[`tool_${c.id + 1}_rating`];
+      return Number(val || 0);
+    });
+    refData = COMPETENCIES.map(c => Number(formData[`c${c.id + 1}r`] || 0));
+  }
+
+  const handleGenerateAI = async () => {
+    if (!session) return;
+    setGeneratingAI(true);
+    setAiError('');
+    try {
+      let competenciesText = '';
+      
+      if (hasDynamicSections) {
+        let currentCriteriaIndex = 0;
+        competenciesText = parsedSections.map((s, idx) => {
+          const items: string[] = [];
+          for (let i = 0; i < s.itemCount; i++) {
+            currentCriteriaIndex++;
+            const key = `critere-${String(currentCriteriaIndex).padStart(2, '0')}`;
+            const studentVal = formData[`entry_${key}`] !== undefined ? formData[`entry_${key}`] : formData[key] || 'Non renseigné';
+            const trainerVal = formData[key] || 'Non renseigné';
+            items.push(`  - Critère ${currentCriteriaIndex} : Évaluation élève : "${studentVal}" | Évaluation formateur : "${trainerVal}"`);
+          }
+          return `### Section ${idx + 1} : ${s.title}\n${items.join('\n')}`;
+        }).join('\n\n');
+      } else {
+        competenciesText = COMPETENCIES.map((comp) => {
+          const studentRating = formData[`entry_s${comp.id + 1}a`] !== undefined 
+            ? formData[`entry_s${comp.id + 1}a`] 
+            : formData[`entry_tool_${comp.id + 1}_rating`] !== undefined
+            ? formData[`entry_tool_${comp.id + 1}_rating`]
+            : formData[`s${comp.id + 1}a`] || formData[`tool_${comp.id + 1}_rating`] || '0';
+          const trainerRating = formData[`c${comp.id + 1}r`] || 'Non évalué';
+          const studentAcquis = formData[`c${comp.id + 1}_acquis`] || 'Non renseigné';
+          const studentObjectif = formData[`c${comp.id + 1}_objectif`] || 'Non renseigné';
+          
+          return `### ${comp.num} - ${comp.title} (${comp.sub})
+- Auto-positionnement Élève : ${studentRating}/4
+- Note Formateur Référent : ${trainerRating}/4
+- Points acquis déclarés par l'élève : "${studentAcquis}"
+- Objectifs visés déclarés par l'élève : "${studentObjectif}"`;
+        }).join('\n\n');
+      }
+
+      const prompt = `Voici les résultats de l'auto-positionnement (Élève) et de l'évaluation du formateur référent pour l'apprenant : ${session.userName}.
+
+Compétences et critères évalués :
+
+${competenciesText}
+
+Veuillez rédiger une analyse de synthèse professionnelle pour le dossier pédagogique (Qualiopi) de cet apprenant.
+Votre synthèse doit obligatoirement aborder :
+1. **Le Profil du Candidat** : Une analyse globale de sa posture et de son niveau général (ex: profil à l'aise avec la technique mais manquant de théorie, profil très orienté sécurité, etc.).
+2. **Les Points Forts Majeurs** : Les compétences clés acquises ou sur lesquelles l'élève et le formateur s'accordent.
+3. **Les Points de Vigilance & Axes de Progrès** : Les domaines prioritaires à revoir ou à approfondir en phase 2.
+
+Consignes de formatage :
+- Rédigez en français.
+- Utilisez un ton professionnel, encourageant, constructif et conforme aux exigences Qualiopi.
+- Structurez clairement votre réponse avec des titres et des listes à puces en Markdown.
+- Adaptez-vous aux thématiques spécifiques évaluées (outils graphiques, bureautique, technique ou IA selon le cas). Ne parlez pas d'IA générative ou de prompts si le test porte sur un autre sujet comme Illustrator, Photoshop, Excel ou Premiere !
+- Restez synthétique (environ 300 à 450 mots).
+- Ne mettez pas d'introduction ou de conclusion inutile, allez droit au but.`;
+
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'gemini-2.5-flash',
+          messages: [
+            { role: 'system', content: 'Vous êtes un conseiller pédagogique expert dans l\'analyse des évaluations de compétences et de positionnement Qualiopi.' },
+            { role: 'user', content: prompt }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erreur API: ${response.statusText}`);
+      }
+
+      const resData = await response.json();
+      const content = resData?.choices?.[0]?.message?.content;
+      if (!content) {
+        throw new Error('Réponse vide de l\'IA.');
+      }
+
+      const updatedFormData = {
+        ...(session.formData || {}),
+        ai_synthesis: content
+      };
+      
+      await updateSession(session.id, {
+        formData: updatedFormData
+      });
+    } catch (e: any) {
+      console.error(e);
+      setAiError(e.message || 'Impossible de générer la synthèse IA.');
+    } finally {
+      setGeneratingAI(false);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden font-sans">
@@ -436,18 +638,18 @@ export default function AdminExitAssessment() {
         </div>
       </header>
 
-      {entryTemplate && (
-        <div className="bg-white border-b border-slate-200 px-6 py-2 shrink-0 flex gap-4 text-xs font-semibold print:hidden">
-          <button
-            onClick={() => setActiveTab('exit')}
-            className={`pb-2 border-b-2 transition-colors ${
-              activeTab === 'exit'
-                ? 'border-indigo-600 text-indigo-600 font-bold'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            Bilan de Sortie (Formateur)
-          </button>
+      <div className="bg-white border-b border-slate-200 px-6 py-2 shrink-0 flex gap-4 text-xs font-semibold print:hidden">
+        <button
+          onClick={() => setActiveTab('exit')}
+          className={`pb-2 border-b-2 transition-colors ${
+            activeTab === 'exit'
+              ? 'border-indigo-600 text-indigo-600 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          Bilan de Sortie (Formateur)
+        </button>
+        {entryTemplate && (
           <button
             onClick={() => setActiveTab('entry')}
             className={`pb-2 border-b-2 transition-colors ${
@@ -458,8 +660,18 @@ export default function AdminExitAssessment() {
           >
             Auto-positionnement (Élève - Lecture seule)
           </button>
-        </div>
-      )}
+        )}
+        <button
+          onClick={() => setActiveTab('ai')}
+          className={`pb-2 border-b-2 transition-colors flex items-center gap-1.5 ${
+            activeTab === 'ai'
+              ? 'border-indigo-600 text-indigo-600 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5 text-indigo-500 animate-pulse" /> Synthèse IA & Radar
+        </button>
+      </div>
 
       <div className="flex-grow overflow-auto p-6 print:p-0 print:bg-white print:overflow-visible">
         {activeTab === 'entry' && entryTemplate ? (
@@ -469,6 +681,7 @@ export default function AdminExitAssessment() {
             onFieldChange={handleFieldChange}
             isReadOnly={true}
             pdfTitle={session ? formatPDFFileName(session.userName, entryTemplate.name || 'autopositionnement') : undefined}
+            valuePrefix="entry_"
           />
         ) : activeTab === 'exit' && exitTemplate ? (
           <DynamicFormRenderer
@@ -478,6 +691,109 @@ export default function AdminExitAssessment() {
             isReadOnly={session.status === 'completed'}
             pdfTitle={session ? formatPDFFileName(session.userName, exitTemplate.name || 'bilan') : undefined}
           />
+        ) : activeTab === 'ai' ? (
+          <div className="space-y-6 max-w-4xl mx-auto print:max-w-full print:mx-0">
+            {/* Header section */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:border-slate-100">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Rapport Pédagogique Qualiopi</span>
+                <h3 className="text-lg font-black text-slate-800 mt-1">Synthèse d'Évaluation & Radar de Compétences</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Apprenant : <strong className="text-slate-700">{session.userName}</strong></p>
+              </div>
+              <div className="flex gap-2 print:hidden shrink-0">
+                <button
+                  onClick={handleGenerateAI}
+                  disabled={generatingAI}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {generatingAI ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Synthèse en cours...
+                    </>
+                  ) : formData.ai_synthesis ? (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" /> Régénérer la Synthèse IA
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" /> Générer la Synthèse IA
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Radar Chart and AI Summary Container */}
+            {/* Radar Chart and AI Summary Container */}
+            <div className="space-y-6">
+              {/* Radar Chart Card */}
+              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between items-center print:break-inside-avoid print:shadow-none print:border-slate-100">
+                <div className="text-center w-full">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center justify-center gap-1.5">
+                    <TrendingUp className="w-4 h-4 text-indigo-500" /> Comparatif de Compétences
+                  </h4>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Dual-Overlay : Autoévaluation vs Référent</p>
+                </div>
+                
+                <div className="h-64 w-full flex items-center justify-center my-4">
+                  <RadarChart labels={labels} autoData={autoData} refData={refData} />
+                </div>
+                
+                <div className="flex justify-center gap-4 w-full">
+                  <div className="flex items-center gap-1.5 text-[10px] font-extrabold text-indigo-600">
+                    <span className="w-2.5 h-2.5 bg-indigo-600 rounded-full" /> Autoévaluation
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[10px] font-extrabold text-amber-700">
+                    <span className="w-2.5 h-2.5 bg-amber-700 rounded-full" /> Formateur Référent
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Summary Card */}
+              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col print:shadow-none print:border-slate-100">
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wide mb-4">Analyse de Profil IA</h4>
+                
+                {aiError && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-xs mb-4">
+                    {aiError}
+                  </div>
+                )}
+
+                {generatingAI ? (
+                  <div className="flex-grow flex flex-col items-center justify-center py-12 gap-3 text-center">
+                    <div className="relative flex h-8 w-8">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-8 w-8 bg-indigo-500 flex items-center justify-center">
+                        <Sparkles className="w-4 h-4 text-white animate-pulse" />
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-700">Analyse IA en cours...</p>
+                      <p className="text-[10px] text-slate-400 mt-1 max-w-xs">Gemini analyse l'auto-positionnement de l'élève et l'évaluation du formateur pour rédiger la synthèse...</p>
+                    </div>
+                  </div>
+                ) : formData.ai_synthesis ? (
+                  <div className="prose prose-slate prose-xs max-w-none text-xs text-slate-600 space-y-4 print:text-slate-800">
+                    <ReactMarkdown>{formData.ai_synthesis}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <div className="flex-grow flex flex-col items-center justify-center py-12 gap-3 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                    <Sparkles className="w-8 h-8 text-indigo-300" />
+                    <div>
+                      <p className="text-xs font-bold text-slate-700">Aucune synthèse générée</p>
+                      <p className="text-[10px] text-slate-400 mt-1 max-w-[240px] mx-auto">Cliquez sur le bouton ci-dessus pour générer l'analyse automatique du profil de l'élève.</p>
+                    </div>
+                    <button
+                      onClick={handleGenerateAI}
+                      className="mt-2 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-[10px] font-bold transition-colors"
+                    >
+                      Générer maintenant
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         ) : (
           /* Fallback static C1-C6 Form */
           <div className="space-y-6 max-w-4xl mx-auto">
@@ -519,7 +835,7 @@ export default function AdminExitAssessment() {
                   <p className="text-[10px] text-slate-400">Autoévaluation (Violet) vs Référent (Ambre)</p>
                 </div>
                 <div className="h-64 flex items-center justify-center">
-                  <RadarChart autoData={autoData} refData={refData} />
+                  <RadarChart labels={labels} autoData={autoData} refData={refData} />
                 </div>
                 <div className="flex justify-center gap-4 mt-2">
                   <div className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-600">

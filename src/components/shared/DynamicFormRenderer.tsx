@@ -6,6 +6,7 @@ interface DynamicFormRendererProps {
   onFieldChange: (name: string, value: any) => void;
   isReadOnly?: boolean;
   pdfTitle?: string;
+  valuePrefix?: string;
 }
 
 export default function DynamicFormRenderer({
@@ -13,7 +14,8 @@ export default function DynamicFormRenderer({
   formData,
   onFieldChange,
   isReadOnly = false,
-  pdfTitle
+  pdfTitle,
+  valuePrefix
 }: DynamicFormRendererProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const isPrintMode = new URLSearchParams(window.location.search).get('print') === 'true';
@@ -45,11 +47,13 @@ export default function DynamicFormRenderer({
         const name = input.name || input.id || input.getAttribute('aria-label') || '';
         if (!name) return;
 
-        if (isReadOnly) {
-          input.disabled = true;
-        }
+        input.disabled = isReadOnly;
 
-        const value = formData[name];
+        const lookupKey = valuePrefix ? `${valuePrefix}${name}` : name;
+        let value = formData[lookupKey] !== undefined ? formData[lookupKey] : formData[name];
+        if (value === undefined && !valuePrefix) {
+          value = formData[`entry_${name}`];
+        }
         if (value !== undefined) {
           if (input.type === 'radio') {
             input.checked = String(input.value) === String(value);
@@ -66,11 +70,13 @@ export default function DynamicFormRenderer({
         const name = textarea.name || textarea.id || textarea.getAttribute('aria-label') || '';
         if (!name) return;
 
-        if (isReadOnly) {
-          textarea.disabled = true;
-        }
+        textarea.disabled = isReadOnly;
 
-        const value = formData[name];
+        const lookupKey = valuePrefix ? `${valuePrefix}${name}` : name;
+        let value = formData[lookupKey] !== undefined ? formData[lookupKey] : formData[name];
+        if (value === undefined && !valuePrefix) {
+          value = formData[`entry_${name}`];
+        }
         if (value !== undefined) {
           textarea.value = value;
         }
@@ -81,11 +87,13 @@ export default function DynamicFormRenderer({
         const name = select.name || select.id || select.getAttribute('aria-label') || '';
         if (!name) return;
 
-        if (isReadOnly) {
-          select.disabled = true;
-        }
+        select.disabled = isReadOnly;
 
-        const value = formData[name];
+        const lookupKey = valuePrefix ? `${valuePrefix}${name}` : name;
+        let value = formData[lookupKey] !== undefined ? formData[lookupKey] : formData[name];
+        if (value === undefined && !valuePrefix) {
+          value = formData[`entry_${name}`];
+        }
         if (value !== undefined) {
           select.value = value;
         }
@@ -145,7 +153,8 @@ export default function DynamicFormRenderer({
         value = target.value;
       }
 
-      onFieldChange(name, value);
+      const lookupKey = valuePrefix ? `${valuePrefix}${name}` : name;
+      onFieldChange(lookupKey, value);
       
       // Trigger chart or scripts update in iframe
       triggerScriptUpdates();
@@ -189,8 +198,10 @@ export default function DynamicFormRenderer({
           data = originalSaveSignature();
         }
         if (data) {
-          onFieldChange('signatureData', data);
-          onFieldChange('signatureDate', new Date().toLocaleDateString('fr-FR'));
+          const keySig = valuePrefix ? `${valuePrefix}signatureData` : 'signatureData';
+          const keyDate = valuePrefix ? `${valuePrefix}signatureDate` : 'signatureDate';
+          onFieldChange(keySig, data);
+          onFieldChange(keyDate, new Date().toLocaleDateString('fr-FR'));
         }
         return data;
       };
@@ -200,8 +211,10 @@ export default function DynamicFormRenderer({
         if (originalClearSignature) {
           originalClearSignature();
         }
-        onFieldChange('signatureData', '');
-        onFieldChange('signatureDate', '');
+        const keySig = valuePrefix ? `${valuePrefix}signatureData` : 'signatureData';
+        const keyDate = valuePrefix ? `${valuePrefix}signatureDate` : 'signatureDate';
+        onFieldChange(keySig, '');
+        onFieldChange(keyDate, '');
       };
     }
   };
@@ -212,13 +225,13 @@ export default function DynamicFormRenderer({
   }, [formData, isReadOnly]);
 
   return (
-    <div className={`w-full bg-white ${isPrintMode ? 'border-0 shadow-none' : 'h-[80vh] rounded-2xl border border-slate-200 shadow-sm overflow-hidden'}`}>
+    <div className={`w-full bg-white ${isPrintMode ? 'border-0 shadow-none' : 'rounded-2xl border border-slate-200 shadow-sm overflow-visible'}`}>
       <iframe
         ref={iframeRef}
         srcDoc={htmlContent}
         onLoad={handleIframeLoad}
         className="w-full border-0 min-h-[400px]"
-        style={{ height: isPrintMode ? 'auto' : '100%' }}
+        style={{ height: 'auto' }}
         title="Formulaire Dynamique"
       />
     </div>

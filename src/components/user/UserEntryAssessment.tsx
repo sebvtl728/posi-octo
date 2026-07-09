@@ -53,8 +53,9 @@ export default function UserEntryAssessment() {
     setSyncing(true);
     try {
       await updateSession(session.id, {
-        status: 'completed',
-        completedAt: new Date().toISOString()
+        status: 'active',
+        entryCompleted: true,
+        entryCompletedAt: new Date().toISOString()
       });
     } catch (e) {
       console.error(e);
@@ -86,7 +87,7 @@ export default function UserEntryAssessment() {
     );
   }
 
-  const isCompleted = session.status === 'completed';
+  const isCompleted = session.entryCompleted || session.status === 'completed';
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-16">
@@ -149,6 +150,7 @@ export default function UserEntryAssessment() {
             formData={session.formData || {}}
             onFieldChange={handleFieldChange}
             isReadOnly={isCompleted}
+            valuePrefix="entry_"
           />
         ) : (
           <div className="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm text-center">

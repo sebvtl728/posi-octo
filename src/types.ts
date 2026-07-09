@@ -51,6 +51,8 @@ export interface Session {
   signatureDate?: string;
   entryTemplateId?: string;
   exitTemplateId?: string;
+  entryCompleted?: boolean;
+  entryCompletedAt?: string;
 }
 
 export interface Message {

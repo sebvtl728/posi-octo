@@ -9,10 +9,10 @@ type Filter = 'all' | Session['status'];
 function StatusBadge({ status }: { status: Session['status'] }) {
   const map = {
     pending: 'bg-yellow-100 text-yellow-700',
-    active: 'bg-green-100 text-green-700',
-    completed: 'bg-slate-100 text-slate-600',
+    active: 'bg-indigo-100 text-indigo-700',
+    completed: 'bg-green-100 text-green-700',
   };
-  const labels = { pending: 'En attente', active: '● Actif', completed: 'Terminé' };
+  const labels = { pending: 'En attente', active: 'En cours', completed: 'Terminé' };
   return <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${map[status]}`}>{labels[status]}</span>;
 }
 

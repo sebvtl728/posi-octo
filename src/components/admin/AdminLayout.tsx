@@ -20,7 +20,7 @@ export default function AdminLayout() {
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
-      <aside className="w-52 bg-indigo-950 text-indigo-300 flex flex-col shrink-0">
+      <aside className="w-52 bg-indigo-950 text-indigo-300 flex flex-col shrink-0 print:hidden">
         <div className="p-5 border-b border-indigo-900">
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 bg-indigo-400 rounded-full" />
