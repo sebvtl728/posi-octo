@@ -5,45 +5,39 @@ interface DynamicFormRendererProps {
   formData: Record<string, any>;
   onFieldChange: (name: string, value: any) => void;
   isReadOnly?: boolean;
+  pdfTitle?: string;
 }
 
 export default function DynamicFormRenderer({
   htmlContent,
   formData,
   onFieldChange,
-  isReadOnly = false
+  isReadOnly = false,
+  pdfTitle
 }: DynamicFormRendererProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const isPrintMode = new URLSearchParams(window.location.search).get('print') === 'true';
+  const hasPrintedRef = useRef(false);
 
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+  const handleIframeLoad = () => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
 
-    // 1. Separate styles, scripts, and body content
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(htmlContent, 'text/html');
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) return;
 
-    // Clear previous dynamic styles
-    const existingStyles = document.querySelectorAll('[data-dynamic-form-style]');
-    existingStyles.forEach(s => s.remove());
+    // Avoid running on initial empty about:blank page before srcDoc is loaded
+    const hasContent = doc.querySelector('input, textarea, select, button, form, .w');
+    if (!hasContent) return;
 
-    // Inject styles
-    const styles = doc.querySelectorAll('style');
-    styles.forEach(style => {
-      const styleEl = document.createElement('style');
-      styleEl.setAttribute('data-dynamic-form-style', 'true');
-      styleEl.textContent = style.textContent;
-      document.head.appendChild(styleEl);
-    });
+    if (pdfTitle) {
+      doc.title = pdfTitle;
+    }
 
-    // Get body content
-    const bodyContent = doc.body.innerHTML;
-    container.innerHTML = bodyContent;
-
-    // 2. Populate inputs, textareas and radios with current values from formData
-    const inputs = container.querySelectorAll<HTMLInputElement>('input');
-    const textareas = container.querySelectorAll<HTMLTextAreaElement>('textarea');
-    const selects = container.querySelectorAll<HTMLSelectElement>('select');
+    // 1. Populate inputs, textareas and selects with values from formData
+    const inputs = doc.querySelectorAll<HTMLInputElement>('input');
+    const textareas = doc.querySelectorAll<HTMLTextAreaElement>('textarea');
+    const selects = doc.querySelectorAll<HTMLSelectElement>('select');
 
     const restoreFieldValues = () => {
       // Inputs
@@ -100,7 +94,36 @@ export default function DynamicFormRenderer({
 
     restoreFieldValues();
 
-    // 3. Attach change/input listeners to automatically sync inputs to Firestore
+    // Trigger change handlers if the template has scripts (like radar chart update)
+    const triggerScriptUpdates = () => {
+      if (iframe.contentWindow && 'updateRadar' in iframe.contentWindow) {
+        try {
+          (iframe.contentWindow as any).updateRadar();
+        } catch (e) {
+          console.error('Failed to trigger updateRadar inside iframe', e);
+        }
+      }
+    };
+    
+    triggerScriptUpdates();
+
+    // Auto resize iframe height to fit its full content size (avoids scrollbars during printing)
+    const resizeIframe = () => {
+      try {
+        if (doc.documentElement) {
+          const height = doc.documentElement.scrollHeight;
+          iframe.style.height = `${height + 40}px`;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    resizeIframe();
+    // Run resize again after scripts and assets finish loading
+    setTimeout(resizeIframe, 500);
+
+    // 2. Attach change/input listeners to sync values to Firestore
     const handleInputEvent = (e: Event) => {
       if (isReadOnly) return;
       const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
@@ -116,44 +139,88 @@ export default function DynamicFormRenderer({
         if (target.checked) {
           value = target.value;
         } else {
-          return; // Don't trigger change for unchecked radios
+          return;
         }
       } else {
         value = target.value;
       }
 
       onFieldChange(name, value);
+      
+      // Trigger chart or scripts update in iframe
+      triggerScriptUpdates();
     };
 
-    container.addEventListener('input', handleInputEvent);
-    container.addEventListener('change', handleInputEvent);
+    doc.body.removeEventListener('input', handleInputEvent);
+    doc.body.removeEventListener('change', handleInputEvent);
+    doc.body.addEventListener('input', handleInputEvent);
+    doc.body.addEventListener('change', handleInputEvent);
 
-    // 4. Inject and execute scripts inside HTML template
-    const scripts = doc.querySelectorAll('script');
-    scripts.forEach(script => {
-      const scriptEl = document.createElement('script');
-      scriptEl.setAttribute('data-dynamic-form-script', 'true');
-      if (script.src) {
-        scriptEl.src = script.src;
-      } else {
-        scriptEl.textContent = script.textContent;
-      }
-      document.body.appendChild(scriptEl);
-    });
+    // Trigger automatic print if printMode is active on the parent window
+    if (isPrintMode && !hasPrintedRef.current) {
+      const triggerPrint = () => {
+        if (document.hasFocus()) {
+          hasPrintedRef.current = true;
+          setTimeout(() => {
+            try {
+              iframe.contentWindow?.focus();
+              iframe.contentWindow?.print();
+            } catch (e) {
+              console.error('Failed to trigger print inside iframe', e);
+            }
+          }, 1000);
+        } else {
+          const handleWindowFocus = () => {
+            window.removeEventListener('focus', handleWindowFocus);
+            triggerPrint();
+          };
+          window.addEventListener('focus', handleWindowFocus);
+        }
+      };
+      triggerPrint();
+    }
 
-    return () => {
-      container.removeEventListener('input', handleInputEvent);
-      container.removeEventListener('change', handleInputEvent);
+    // Handle custom signatures saved inside the iframe
+    if (iframe.contentWindow) {
+      const originalSaveSignature = (iframe.contentWindow as any).saveSignature;
+      (iframe.contentWindow as any).saveSignature = function() {
+        let data = '';
+        if (originalSaveSignature) {
+          data = originalSaveSignature();
+        }
+        if (data) {
+          onFieldChange('signatureData', data);
+          onFieldChange('signatureDate', new Date().toLocaleDateString('fr-FR'));
+        }
+        return data;
+      };
 
-      // Clean up dynamic scripts and styles on unmount
-      const existingScripts = document.querySelectorAll('[data-dynamic-form-script]');
-      existingScripts.forEach(s => s.remove());
-      const remainingStyles = document.querySelectorAll('[data-dynamic-form-style]');
-      remainingStyles.forEach(s => s.remove());
-    };
-  }, [htmlContent, formData, isReadOnly]);
+      const originalClearSignature = (iframe.contentWindow as any).clearSignature;
+      (iframe.contentWindow as any).clearSignature = function() {
+        if (originalClearSignature) {
+          originalClearSignature();
+        }
+        onFieldChange('signatureData', '');
+        onFieldChange('signatureDate', '');
+      };
+    }
+  };
+
+  // Run initial restore values when formData changes
+  useEffect(() => {
+    handleIframeLoad();
+  }, [formData, isReadOnly]);
 
   return (
-    <div ref={containerRef} className="dynamic-html-form-container w-full flex flex-col items-center mx-auto" />
+    <div className={`w-full bg-white ${isPrintMode ? 'border-0 shadow-none' : 'h-[80vh] rounded-2xl border border-slate-200 shadow-sm overflow-hidden'}`}>
+      <iframe
+        ref={iframeRef}
+        srcDoc={htmlContent}
+        onLoad={handleIframeLoad}
+        className="w-full border-0 min-h-[400px]"
+        style={{ height: isPrintMode ? 'auto' : '100%' }}
+        title="Formulaire Dynamique"
+      />
+    </div>
   );
 }

@@ -4,7 +4,7 @@ import { subscribeToSession, updateSession } from '../../lib/sessions';
 import { getTemplateById } from '../../lib/templates';
 import type { Session, HTMLTemplate } from '../../types';
 import DynamicFormRenderer from '../shared/DynamicFormRenderer';
-import { Check, Info, ArrowLeft, RefreshCw, Trash2 } from 'lucide-react';
+import { Check, Info, ArrowLeft, RefreshCw, Trash2, FileText } from 'lucide-react';
 
 interface CompItem {
   id: number;
@@ -130,7 +130,8 @@ export default function AdminExitAssessment() {
   const [session, setSession] = useState<Session | null>(null);
   const [entryTemplate, setEntryTemplate] = useState<HTMLTemplate | null>(null);
   const [exitTemplate, setExitTemplate] = useState<HTMLTemplate | null>(null);
-  const [activeTab, setActiveTab] = useState<'entry' | 'exit'>('exit');
+  const tabParam = new URLSearchParams(window.location.search).get('tab') as 'entry' | 'exit' | null;
+  const [activeTab, setActiveTab] = useState<'entry' | 'exit'>(tabParam || 'exit');
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
 
@@ -181,6 +182,51 @@ export default function AdminExitAssessment() {
       }
     }
   }, [session?.signatureData, exitTemplate, loading]);
+
+  const formatPDFFileName = (userName: string, templateName: string) => {
+    const cleanUser = userName.trim().replace(/\s+/g, '-');
+    const cleanTemplate = templateName
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    const dateStr = new Date().toISOString().split('T')[0];
+    return `${cleanUser}_${cleanTemplate}_${dateStr}`;
+  };
+
+  const hasPrintedRef = useRef(false);
+
+  // Trigger print and set title if printMode is active
+  useEffect(() => {
+    const printMode = new URLSearchParams(window.location.search).get('print') === 'true';
+    if (!loading && printMode && session && !hasPrintedRef.current) {
+      const templateName = activeTab === 'entry'
+        ? (entryTemplate?.name || 'autopositionnement')
+        : (exitTemplate?.name || 'bilan');
+      document.title = formatPDFFileName(session.userName, templateName);
+
+      if (!exitTemplate) {
+        const triggerFallbackPrint = () => {
+          if (document.hasFocus()) {
+            hasPrintedRef.current = true;
+            const timer = setTimeout(() => {
+              window.print();
+            }, 1000);
+            return () => clearTimeout(timer);
+          } else {
+            const handleFocus = () => {
+              window.removeEventListener('focus', handleFocus);
+              triggerFallbackPrint();
+            };
+            window.addEventListener('focus', handleFocus);
+          }
+        };
+        triggerFallbackPrint();
+      }
+    }
+  }, [loading, exitTemplate, session, entryTemplate, activeTab]);
 
   const handleFieldChange = async (name: string, value: any) => {
     if (!session) return;
@@ -236,6 +282,7 @@ export default function AdminExitAssessment() {
 
   // Fallback canvas drawing handlers
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (isCompleted) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -299,12 +346,13 @@ export default function AdminExitAssessment() {
   }
 
   const formData = session.formData || {};
+  const isCompleted = session.status === 'completed';
   const autoData = COMPETENCIES.map(c => Number(formData[`s${c.id + 1}a`] || formData[`tool_${c.id + 1}_rating`] || 0));
   const refData = COMPETENCIES.map(c => Number(formData[`c${c.id + 1}r`] || 0));
 
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden font-sans">
-      <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0">
+      <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 print:hidden">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate(-1)} className="text-slate-400 hover:text-slate-600 transition-colors">
             <ArrowLeft className="w-4 h-4" />
@@ -325,6 +373,60 @@ export default function AdminExitAssessment() {
               <Check className="w-3 h-3" /> Sauvegardé dans le cloud
             </span>
           )}
+          
+          {session.status === 'completed' ? (
+            <button
+              onClick={async () => {
+                setSyncing(true);
+                try {
+                  await updateSession(session.id, { status: 'active' });
+                } catch (e) {
+                  console.error(e);
+                } finally {
+                  setSyncing(false);
+                }
+              }}
+              className="px-2.5 py-1.5 bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+            >
+              <Check className="w-3.5 h-3.5" /> Bilan Clôturé (Réouvrir)
+            </button>
+          ) : (
+            <button
+              onClick={async () => {
+                setSyncing(true);
+                try {
+                  await updateSession(session.id, {
+                    status: 'completed',
+                    completedAt: new Date().toISOString()
+                  });
+                } catch (e) {
+                  console.error(e);
+                } finally {
+                  setSyncing(false);
+                }
+              }}
+              className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+            >
+              Clôturer le Bilan
+            </button>
+          )}
+
+          <button
+            onClick={() => {
+              const iframe = document.querySelector('iframe');
+              if (iframe instanceof HTMLIFrameElement) {
+                iframe.contentWindow?.focus();
+                iframe.contentWindow?.print();
+              } else {
+                window.print();
+              }
+            }}
+            className="px-2.5 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+            title="Exporter en PDF"
+          >
+            <FileText className="w-3.5 h-3.5 text-indigo-500" /> Exporter PDF
+          </button>
+
           <button
             onClick={handleClearAll}
             className="px-2.5 py-1.5 border border-red-200 hover:bg-red-50 text-red-600 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
@@ -335,7 +437,7 @@ export default function AdminExitAssessment() {
       </header>
 
       {entryTemplate && (
-        <div className="bg-white border-b border-slate-200 px-6 py-2 shrink-0 flex gap-4 text-xs font-semibold">
+        <div className="bg-white border-b border-slate-200 px-6 py-2 shrink-0 flex gap-4 text-xs font-semibold print:hidden">
           <button
             onClick={() => setActiveTab('exit')}
             className={`pb-2 border-b-2 transition-colors ${
@@ -359,20 +461,22 @@ export default function AdminExitAssessment() {
         </div>
       )}
 
-      <div className="flex-grow overflow-auto p-6">
+      <div className="flex-grow overflow-auto p-6 print:p-0 print:bg-white print:overflow-visible">
         {activeTab === 'entry' && entryTemplate ? (
           <DynamicFormRenderer
             htmlContent={entryTemplate.htmlContent}
             formData={formData}
             onFieldChange={handleFieldChange}
             isReadOnly={true}
+            pdfTitle={session ? formatPDFFileName(session.userName, entryTemplate.name || 'autopositionnement') : undefined}
           />
         ) : activeTab === 'exit' && exitTemplate ? (
           <DynamicFormRenderer
             htmlContent={exitTemplate.htmlContent}
             formData={formData}
             onFieldChange={handleFieldChange}
-            isReadOnly={false}
+            isReadOnly={session.status === 'completed'}
+            pdfTitle={session ? formatPDFFileName(session.userName, exitTemplate.name || 'bilan') : undefined}
           />
         ) : (
           /* Fallback static C1-C6 Form */
@@ -390,7 +494,8 @@ export default function AdminExitAssessment() {
                   value={formData[`date_bilan`] || ''}
                   onChange={(e) => handleFieldChange('date_bilan', e.target.value)}
                   placeholder="Ex: Mercredi 4"
-                  className="mt-1 font-semibold text-sm text-slate-800 border-b border-slate-200 focus:border-indigo-500 focus:outline-none w-full py-0.5"
+                  disabled={isCompleted}
+                  className="mt-1 font-semibold text-sm text-slate-800 border-b border-slate-200 focus:border-indigo-500 focus:outline-none w-full py-0.5 disabled:opacity-60"
                 />
               </div>
               <div>
@@ -400,7 +505,8 @@ export default function AdminExitAssessment() {
                   value={formData[`trainer_referent`] || ''}
                   onChange={(e) => handleFieldChange('trainer_referent', e.target.value)}
                   placeholder="Ex: Sébastien Veitl"
-                  className="mt-1 font-semibold text-sm text-slate-800 border-b border-slate-200 focus:border-indigo-500 focus:outline-none w-full py-0.5"
+                  disabled={isCompleted}
+                  className="mt-1 font-semibold text-sm text-slate-800 border-b border-slate-200 focus:border-indigo-500 focus:outline-none w-full py-0.5 disabled:opacity-60"
                 />
               </div>
             </div>
@@ -433,7 +539,8 @@ export default function AdminExitAssessment() {
                     value={formData['synthesis_points_forts'] || ''}
                     onChange={(e) => handleFieldChange('synthesis_points_forts', e.target.value)}
                     placeholder="Points forts observés..."
-                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 h-20 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    disabled={isCompleted}
+                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 h-20 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
                   />
                 </div>
                 <div>
@@ -442,7 +549,8 @@ export default function AdminExitAssessment() {
                     value={formData['synthesis_axes_progres'] || ''}
                     onChange={(e) => handleFieldChange('synthesis_axes_progres', e.target.value)}
                     placeholder="Objectifs d'amélioration..."
-                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 h-20 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    disabled={isCompleted}
+                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 h-20 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
                   />
                 </div>
               </div>
@@ -478,6 +586,7 @@ export default function AdminExitAssessment() {
                               <button
                                 key={n}
                                 onClick={() => handleFieldChange(`s${comp.id + 1}a`, n)}
+                                disabled={isCompleted}
                                 className={`w-8 h-8 rounded-lg text-xs font-bold border transition-all ${
                                   Number(autoVal) === n ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-500 border-slate-200'
                                 }`}
@@ -494,6 +603,7 @@ export default function AdminExitAssessment() {
                               <button
                                 key={n}
                                 onClick={() => handleFieldChange(`c${comp.id + 1}r`, n)}
+                                disabled={isCompleted}
                                 className={`w-8 h-8 rounded-lg text-xs font-bold border transition-all ${
                                   Number(refVal) === n ? 'bg-amber-600 text-white border-amber-600' : 'bg-amber-50 text-amber-800 border-amber-200'
                                 }`}
@@ -518,6 +628,7 @@ export default function AdminExitAssessment() {
                             <button
                               key={item.val}
                               onClick={() => handleFieldChange(`st${comp.id + 1}`, item.val)}
+                              disabled={isCompleted}
                               className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
                                 statusVal === item.val ? item.cls : 'bg-slate-50 border-slate-200 text-slate-500'
                               }`}
@@ -535,7 +646,8 @@ export default function AdminExitAssessment() {
                             value={acquisVal}
                             onChange={(e) => handleFieldChange(`c${comp.id + 1}_acquis`, e.target.value)}
                             placeholder={comp.placeholderAcquis}
-                            className="w-full text-xs bg-slate-50/50 border border-slate-200 rounded-xl p-3 h-16 resize-none focus:outline-none"
+                            disabled={isCompleted}
+                            className="w-full text-xs bg-slate-50/50 border border-slate-200 rounded-xl p-3 h-16 resize-none focus:outline-none disabled:opacity-60"
                           />
                         </div>
                         <div>
@@ -544,7 +656,8 @@ export default function AdminExitAssessment() {
                             value={objectifVal}
                             onChange={(e) => handleFieldChange(`c${comp.id + 1}_objectif`, e.target.value)}
                             placeholder={comp.placeholderObjectif}
-                            className="w-full text-xs bg-slate-50/50 border border-slate-200 rounded-xl p-3 h-16 resize-none focus:outline-none"
+                            disabled={isCompleted}
+                            className="w-full text-xs bg-slate-50/50 border border-slate-200 rounded-xl p-3 h-16 resize-none focus:outline-none disabled:opacity-60"
                           />
                         </div>
                       </div>

@@ -4,6 +4,7 @@ import { subscribeToSessions, createSession, updateSession } from '../../lib/ses
 import { subscribeToQuestionnaires } from '../../lib/questionnaire';
 import { subscribeToTemplates } from '../../lib/templates';
 import QRCodePanel from '../shared/QRCodePanel';
+import { FileText } from 'lucide-react';
 import type { Session, Questionnaire, HTMLTemplate } from '../../types';
 
 type Filter = 'all' | Session['status'];
@@ -199,12 +200,28 @@ export default function AdminPositioning() {
                           {s.status === 'completed' ? 'Fiche Qualiopi' : 'Suivre'}
                         </button>
                       ) : (
-                        <button
-                          onClick={() => navigate(`/admin/exit-assessment/${s.id}`)}
-                          className="text-indigo-500 hover:underline font-semibold"
-                        >
-                          Bilan & Radar
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => navigate(`/admin/exit-assessment/${s.id}`)}
+                            className="text-indigo-500 hover:underline font-semibold"
+                          >
+                            Bilan & Radar
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (s.type === 'entry_self_assessment') {
+                                window.open(`/admin/exit-assessment/${s.id}?print=true&tab=entry`, '_blank');
+                                window.open(`/admin/exit-assessment/${s.id}?print=true&tab=exit`, '_blank');
+                              } else {
+                                window.open(`/admin/exit-assessment/${s.id}?print=true&tab=exit`, '_blank');
+                              }
+                            }}
+                            className="text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 transition-colors p-1.5 rounded-lg flex items-center justify-center shrink-0"
+                            title="Exporter en PDF"
+                          >
+                            <FileText className="w-5 h-5" />
+                          </button>
+                        </div>
                       )}
                       {s.status === 'pending' && (
                         <>
@@ -362,23 +379,60 @@ export default function AdminPositioning() {
 
       {qrSession && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setQrSession(null)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl flex flex-col items-center gap-4" onClick={e => e.stopPropagation()}>
-            <div className="text-center">
-              <h3 className="font-bold text-sm mb-1">Lien — {qrSession.userName}</h3>
-              <p className="text-[10px] text-slate-400">Partagez ce lien ou ce QR code à l'apprenant.</p>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl flex flex-col items-center gap-4" onClick={e => e.stopPropagation()}>
+            <div className="text-center w-full">
+              <h3 className="font-bold text-sm mb-1">Liens d'évaluation — {qrSession.userName}</h3>
+              <p className="text-[10px] text-slate-400">Sélectionnez le lien à copier ou flasher.</p>
             </div>
-            <QRCodePanel
-              url={
-                qrSession.type === 'entry_self_assessment'
-                  ? `${window.location.origin}/entry-assessment/${qrSession.id}`
-                  : qrSession.type === 'exit_assessment'
-                  ? `${window.location.origin}/admin/exit-assessment/${qrSession.id}`
-                  : `${window.location.origin}/s/${qrSession.id}`
-              }
-              size={160}
-              label="Scanner pour démarrer"
-            />
-            <button onClick={() => setQrSession(null)} className="text-xs text-slate-500 hover:underline">Fermer</button>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+              {/* Apprenant Link */}
+              <div className="flex flex-col items-center p-3 border border-slate-100 rounded-xl bg-slate-50/50">
+                <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-wider mb-2">Lien Apprenant</span>
+                <QRCodePanel
+                  url={
+                    qrSession.type === 'entry_self_assessment'
+                      ? `${window.location.origin}/entry-assessment/${qrSession.id}`
+                      : `${window.location.origin}/s/${qrSession.id}`
+                  }
+                  size={120}
+                  label="Flasher pour s'auto-évaluer"
+                />
+                <button
+                  onClick={() => {
+                    const url = qrSession.type === 'entry_self_assessment'
+                      ? `${window.location.origin}/entry-assessment/${qrSession.id}`
+                      : `${window.location.origin}/s/${qrSession.id}`;
+                    navigator.clipboard.writeText(url);
+                    alert('Lien apprenant copié !');
+                  }}
+                  className="mt-3 text-[10px] px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg transition-colors w-full"
+                >
+                  Copier le lien
+                </button>
+              </div>
+
+              {/* Formateur Link */}
+              <div className="flex flex-col items-center p-3 border border-slate-100 rounded-xl bg-slate-50/50">
+                <span className="text-[9px] font-bold text-amber-700 uppercase tracking-wider mb-2">Lien Formateur</span>
+                <QRCodePanel
+                  url={`${window.location.origin}/admin/exit-assessment/${qrSession.id}`}
+                  size={120}
+                  label="Flasher pour le Bilan & Radar"
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/admin/exit-assessment/${qrSession.id}`);
+                    alert('Lien formateur copié !');
+                  }}
+                  className="mt-3 text-[10px] px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold rounded-lg transition-colors w-full"
+                >
+                  Copier le lien
+                </button>
+              </div>
+            </div>
+
+            <button onClick={() => setQrSession(null)} className="text-xs text-slate-400 hover:text-slate-600 hover:underline">Fermer</button>
           </div>
         </div>
       )}
