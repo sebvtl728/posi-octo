@@ -201,17 +201,22 @@ export default function AdminExitAssessment() {
 
   const hasPrintedRef = useRef(false);
 
-  // Trigger print and set title if printMode is active
+  // Update page title reactively to set the default PDF filename
   useEffect(() => {
-    const printMode = new URLSearchParams(window.location.search).get('print') === 'true';
-    if (!loading && printMode && session && !hasPrintedRef.current) {
+    if (!loading && session) {
       const templateName = activeTab === 'entry'
         ? (entryTemplate?.name || 'autopositionnement')
         : activeTab === 'ai'
         ? 'synthese-radar'
         : (exitTemplate?.name || 'bilan');
       document.title = formatPDFFileName(session.userName, templateName);
+    }
+  }, [loading, session, activeTab, entryTemplate, exitTemplate]);
 
+  // Trigger automatic print if printMode is active
+  useEffect(() => {
+    const printMode = new URLSearchParams(window.location.search).get('print') === 'true';
+    if (!loading && printMode && session && !hasPrintedRef.current) {
       if (!exitTemplate || activeTab === 'ai') {
         const triggerFallbackPrint = () => {
           if (document.hasFocus()) {
@@ -231,7 +236,7 @@ export default function AdminExitAssessment() {
         triggerFallbackPrint();
       }
     }
-  }, [loading, exitTemplate, session, entryTemplate, activeTab]);
+  }, [loading, exitTemplate, session, activeTab]);
 
   const handleFieldChange = async (name: string, value: any) => {
     if (!session) return;
@@ -694,11 +699,13 @@ Consignes de formatage :
         ) : activeTab === 'ai' ? (
           <div className="space-y-6 max-w-4xl mx-auto print:max-w-full print:mx-0">
             {/* Header section */}
-            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:border-slate-100">
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:border-slate-100 print:shadow-none">
               <div>
                 <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Rapport Pédagogique Qualiopi</span>
                 <h3 className="text-lg font-black text-slate-800 mt-1">Synthèse d'Évaluation & Radar de Compétences</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Apprenant : <strong className="text-slate-700">{session.userName}</strong></p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Fiche outil : <strong className="text-slate-700">{exitTemplate?.name || entryTemplate?.name || 'Positionnement'}</strong>
+                </p>
               </div>
               <div className="flex gap-2 print:hidden shrink-0">
                 <button
@@ -720,6 +727,32 @@ Consignes de formatage :
                     </>
                   )}
                 </button>
+              </div>
+            </div>
+
+            {/* Info Banner containing Student Name, Date, and Trainer Name */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-6 print:border-slate-100 print:shadow-none">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Apprenant</span>
+                <span className="text-sm font-semibold text-slate-800 mt-1 block">
+                  {formData['nom'] && formData['prenom'] 
+                    ? `${formData['prenom']} ${formData['nom']}` 
+                    : formData['entry_nom'] && formData['entry_prenom']
+                    ? `${formData['entry_prenom']} ${formData['entry_nom']}`
+                    : session.userName}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Date de l'évaluation</span>
+                <span className="text-sm font-semibold text-slate-800 mt-1 block">
+                  {formData['date-bilan'] || formData['date_bilan'] || formData['date-remplissage'] || formData['entry_date-remplissage'] || (session.completedAt ? new Date(session.completedAt).toLocaleDateString('fr-FR') : new Date(session.createdAt).toLocaleDateString('fr-FR'))}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Formateur Référent</span>
+                <span className="text-sm font-semibold text-slate-800 mt-1 block">
+                  {formData['formateur-referent'] || formData['trainer_referent'] || formData['entry_formateur-referent'] || 'Sébastien Veitl'}
+                </span>
               </div>
             </div>
 
