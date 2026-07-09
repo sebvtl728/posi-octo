@@ -23,6 +23,11 @@ service cloud.firestore {
       }
     }
 
+    // Collection group messages rule for cleanup
+    match /{path=**}/messages/{messageId} {
+      allow read, write: if true;
+    }
+
     // Templates HTML : lecture/écriture
     match /templates/{id} {
       allow read, write: if true;

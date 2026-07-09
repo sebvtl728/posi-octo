@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { subscribeToSessions, createSession, updateSession } from '../../lib/sessions';
+import { subscribeToSessions, createSession, updateSession, deleteSession, deleteObsoleteSessions, deleteAllSessions } from '../../lib/sessions';
 import { subscribeToQuestionnaires } from '../../lib/questionnaire';
 import { subscribeToTemplates } from '../../lib/templates';
 import QRCodePanel from '../shared/QRCodePanel';
-import { FileText } from 'lucide-react';
+import { FileText, Trash2 } from 'lucide-react';
 import type { Session, Questionnaire, HTMLTemplate } from '../../types';
 
 type Filter = 'all' | Session['status'];
@@ -241,6 +241,22 @@ export default function AdminPositioning() {
                           )}
                         </>
                       )}
+                      
+                      <button
+                        onClick={async () => {
+                          if (confirm(`Voulez-vous supprimer définitivement la session de "${s.userName}" ?`)) {
+                            try {
+                              await deleteSession(s.id);
+                            } catch (e) {
+                              console.error(e);
+                            }
+                          }
+                        }}
+                        className="text-xs text-red-600 hover:text-red-800 font-semibold hover:underline border-l border-slate-200 pl-3"
+                        title="Supprimer la session"
+                      >
+                        Supprimer
+                      </button>
                     </td>
                   </tr>
                 );

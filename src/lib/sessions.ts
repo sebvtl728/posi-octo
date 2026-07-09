@@ -92,3 +92,24 @@ export async function deleteSessionsWithoutQuestionnaire(): Promise<number> {
   await Promise.all(toDelete.map(d => deleteDoc(d.ref)));
   return toDelete.length;
 }
+
+export async function deleteSession(sessionId: string): Promise<void> {
+  await deleteDoc(doc(db, 'sessions', sessionId));
+}
+
+export async function deleteObsoleteSessions(): Promise<number> {
+  const snap = await getDocs(collection(db, 'sessions'));
+  const validTypes = ['individual', 'positioning', 'entry_self_assessment', 'exit_assessment'];
+  const toDelete = snap.docs.filter(d => {
+    const data = d.data();
+    return !data.type || !validTypes.includes(data.type);
+  });
+  await Promise.all(toDelete.map(d => deleteDoc(d.ref)));
+  return toDelete.length;
+}
+
+export async function deleteAllSessions(): Promise<number> {
+  const snap = await getDocs(collection(db, 'sessions'));
+  await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+  return snap.docs.length;
+}
