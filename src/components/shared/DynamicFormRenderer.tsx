@@ -102,6 +102,32 @@ export default function DynamicFormRenderer({
 
     restoreFieldValues();
 
+    // Patch signature inputs to bubble up programmatic value changes (like canvas drawing)
+    inputs.forEach(input => {
+      const name = input.name || input.id || '';
+      if (name === 'signature' || name === 'signatureData' || name.includes('signature')) {
+        try {
+          const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+          if (descriptor && descriptor.set) {
+            Object.defineProperty(input, 'value', {
+              get() {
+                return descriptor.get?.call(this);
+              },
+              set(val) {
+                descriptor.set?.call(this, val);
+                // Dispatch event so that handleInputEvent can detect the change and save it
+                this.dispatchEvent(new Event('input', { bubbles: true }));
+                this.dispatchEvent(new Event('change', { bubbles: true }));
+              },
+              configurable: true
+            });
+          }
+        } catch (e) {
+          console.error('Failed to patch signature input descriptor', e);
+        }
+      }
+    });
+
     // Trigger change handlers if the template has scripts (like radar chart update)
     const triggerScriptUpdates = () => {
       if (iframe.contentWindow && 'updateRadar' in iframe.contentWindow) {
