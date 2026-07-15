@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { Paperclip, FolderPlus, X } from 'lucide-react';
+import { Paperclip, FolderPlus, X, Trash2, Pencil, Upload, AlertCircle } from 'lucide-react';
 import {
   subscribeToQuestionnaires,
   addQuestionnaire,
   validateQuestionnaireJSON,
   updateQuestionnaire,
+  deleteQuestionnaire,
 } from '../../lib/questionnaire';
 import { subscribeToFolders, addFolder, deleteFolder } from '../../lib/folders';
 import type { Questionnaire, Folder } from '../../types';
@@ -60,7 +61,7 @@ function PreviewModal({
                     <span className="shrink-0 w-5 h-5 rounded-full bg-slate-100 text-slate-400 text-[10px] font-bold flex items-center justify-center mt-0.5">
                       {i + 1}
                     </span>
-                    {q.question}
+                    {typeof q === 'string' ? q : (q.question || (q as any).title || '')}
                   </li>
                 ))}
               </ul>
@@ -137,6 +138,14 @@ export default function AdminQuestionnaires() {
   const [success, setSuccess] = useState('');
   const [preview, setPreview] = useState<Questionnaire | null>(null);
 
+  // Editing state variables
+  const [editQuestionnaire, setEditQuestionnaire] = useState<Questionnaire | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editFileContent, setEditFileContent] = useState('');
+  const [editFileName, setEditFileName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+
   // Navigation dossiers
   const [folderFilter, setFolderFilter] = useState<string>('all'); // 'all' | 'none' | folderId (root)
   const [subFolderFilter, setSubFolderFilter] = useState<string>('all'); // 'all' | subfolderId
@@ -201,6 +210,92 @@ export default function AdminQuestionnaires() {
     await updateQuestionnaire(questionnaireId, { folderId: folderId || undefined });
   };
 
+  const handleToggleActive = async (q: Questionnaire) => {
+    const nextState = !q.isActive;
+    try {
+      if (nextState) {
+        // Set all others to false
+        await Promise.all(questionnaires.map(item => {
+          if (item.id !== q.id && item.isActive) {
+            return updateQuestionnaire(item.id, { isActive: false });
+          }
+          return Promise.resolve();
+        }));
+      }
+      await updateQuestionnaire(q.id, { isActive: nextState });
+    } catch (e) {
+      console.error(e);
+      alert('Erreur lors de la modification de l\'activation.');
+    }
+  };
+
+  const handleDeleteQuestionnaire = async (q: Questionnaire) => {
+    if (!window.confirm(`Supprimer définitivement le questionnaire "${q.name}" ?`)) return;
+    try {
+      await deleteQuestionnaire(q.id);
+    } catch (e) {
+      console.error(e);
+      alert('Erreur lors de la suppression du questionnaire.');
+    }
+  };
+
+  const openEdit = (q: Questionnaire) => {
+    setEditQuestionnaire(q);
+    setEditName(q.name);
+    setEditFileContent('');
+    setEditFileName('');
+    setEditError('');
+  };
+
+  const handleEditFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.json')) {
+      setEditError('Veuillez sélectionner un fichier .json uniquement.');
+      return;
+    }
+
+    setEditFileName(file.name);
+    setEditError('');
+
+    try {
+      const content = await file.text();
+      validateQuestionnaireJSON(content);
+      setEditFileContent(content);
+    } catch (err: any) {
+      setEditError(err.message || 'JSON invalide.');
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editQuestionnaire || !editName.trim()) {
+      setEditError('Le nom ne peut pas être vide.');
+      return;
+    }
+
+    setSaving(true);
+    setEditError('');
+
+    try {
+      const updates: Partial<Questionnaire> = {
+        name: editName.trim(),
+      };
+      if (editFileContent) {
+        updates.content = editFileContent;
+        const parsed = validateQuestionnaireJSON(editFileContent);
+        updates.categoriesCount = parsed.categories.length;
+        updates.questionsCount = parsed.categories.reduce((sum, c) => sum + c.questions.length, 0);
+      }
+      await updateQuestionnaire(editQuestionnaire.id, updates);
+      setEditQuestionnaire(null);
+    } catch (err: any) {
+      setEditError(err.message || 'Erreur lors de la modification.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const filtered = questionnaires.filter(q => {
     if (folderFilter === 'none') return !q.folderId;
     if (folderFilter === 'all') return true;
@@ -218,9 +313,9 @@ export default function AdminQuestionnaires() {
   ]);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden font-sans">
       <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0">
-        <h2 className="font-semibold text-sm text-slate-800">Questionnaires</h2>
+        <h2 className="font-semibold text-sm text-slate-800">Soutenances</h2>
         <label className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium cursor-pointer hover:bg-indigo-700 transition-colors">
           + Importer un JSON
           <input type="file" accept=".json" className="hidden" onChange={e => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0]); e.target.value = ''; }} />
@@ -309,46 +404,82 @@ export default function AdminQuestionnaires() {
         {!activeRootFolder && <div className="mb-5" />}
 
         {/* Liste questionnaires */}
-        <div className="space-y-3 mb-6">
-          {filtered.map(q => (
-            <div key={q.id} className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <Paperclip className="w-4 h-4 text-slate-400 shrink-0" />
-                  <span className="font-semibold text-sm text-slate-800 truncate">{q.name}</span>
-                </div>
-                <div className="flex items-center gap-3 mt-1 ml-6">
-                  <span className="text-xs text-slate-400">
-                    {q.categoriesCount} catégories · {q.questionsCount} questions · {new Date(q.createdAt).toLocaleDateString('fr-FR')}
-                  </span>
-                  {folderOptions.length > 0 && (
-                    <select
-                      value={q.folderId ?? ''}
-                      onChange={e => handleFolderAssign(q.id, e.target.value)}
-                      className="text-[10px] text-slate-500 bg-transparent border border-slate-200 rounded-md px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400 cursor-pointer"
-                    >
-                      <option value="">Sans dossier</option>
-                      {folderOptions.map(o => (
-                        <option key={o.id} value={o.id}>{o.label}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              </div>
-              <div className="flex gap-2 shrink-0">
-                <button
-                  onClick={() => setPreview(q)}
-                  className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors"
-                >
-                  Aperçu
-                </button>
-              </div>
-            </div>
-          ))}
-          {filtered.length === 0 && (
+        <div className="mb-6">
+          {filtered.length === 0 ? (
             <p className="text-sm text-slate-400 italic text-center py-8">
               {questionnaires.length === 0 ? 'Aucun questionnaire importé.' : 'Aucun questionnaire dans cette sélection.'}
             </p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filtered.map(q => (
+                <div key={q.id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <button
+                        onClick={() => handleToggleActive(q)}
+                        className={`px-2 py-0.5 rounded-full text-[9px] font-bold border transition-all ${
+                          q.isActive
+                            ? 'bg-green-50 text-green-700 border-green-100 hover:bg-green-100'
+                            : 'bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100'
+                        }`}
+                        title={q.isActive ? 'Questionnaire actif par défaut' : 'Définir comme questionnaire actif'}
+                      >
+                        {q.isActive ? '★ Actif' : '☆ Définir actif'}
+                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => openEdit(q)}
+                          className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
+                          title="Modifier le questionnaire"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteQuestionnaire(q)}
+                          className="text-slate-400 hover:text-red-500 transition-colors p-1"
+                          title="Supprimer le questionnaire"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <h3 className="font-bold text-sm text-slate-800 mb-1 line-clamp-2" title={q.name}>{q.name}</h3>
+                    <p className="text-[10px] text-slate-400 mb-4">
+                      Importé le {new Date(q.createdAt).toLocaleDateString('fr-FR')}
+                    </p>
+                    <div className="text-[11px] text-slate-500 space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-100/50 mb-4">
+                      <div>📁 <span className="font-semibold">{q.categoriesCount}</span> catégories</div>
+                      <div>❓ <span className="font-semibold">{q.questionsCount}</span> questions</div>
+                    </div>
+                  </div>
+                  <div className="border-t border-slate-100 pt-3 flex flex-col gap-2">
+                    {/* Folder Selection */}
+                    {folderOptions.length > 0 && (
+                      <div className="flex items-center justify-between gap-2 text-[10px]">
+                        <span className="text-slate-400 shrink-0">Dossier :</span>
+                        <select
+                          value={q.folderId ?? ''}
+                          onChange={e => handleFolderAssign(q.id, e.target.value)}
+                          className="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400 cursor-pointer w-full text-right"
+                        >
+                          <option value="">Sans dossier</option>
+                          {folderOptions.map(o => (
+                            <option key={o.id} value={o.id}>{o.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {/* Action buttons */}
+                    <button
+                      onClick={() => setPreview(q)}
+                      className="w-full py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors text-center"
+                    >
+                      Aperçu
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
 
@@ -368,6 +499,70 @@ export default function AdminQuestionnaires() {
         try { categories = JSON.parse(preview.content).categories ?? []; } catch { parseError = true; }
         return <PreviewModal name={preview.name} categories={categories} parseError={parseError} onClose={() => setPreview(null)} />;
       })()}
+
+      {/* Edit Modal */}
+      {editQuestionnaire && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setEditQuestionnaire(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-1">
+              <h3 className="font-bold text-sm">Modifier la soutenance</h3>
+              <button onClick={() => setEditQuestionnaire(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400 mb-5">
+              Modifiez le nom ou importez un nouveau fichier JSON de questions pour remplacer la soutenance actuelle.
+            </p>
+
+            <div className="space-y-4 mb-5">
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1">Nom de la soutenance</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  placeholder="Ex: Titre de soutenance"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-2">Remplacer les questions (Optionnel)</label>
+                <label className="w-full flex flex-col items-center justify-center border border-dashed border-slate-300 rounded-xl p-4 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors">
+                  <Upload className="w-5 h-5 text-slate-400 mb-2" />
+                  <span className="text-xs text-slate-600 font-medium">
+                    {editFileName ? editFileName : 'Choisir un nouveau fichier .json'}
+                  </span>
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleEditFileChange}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {editError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex gap-2 text-red-700 text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{editError}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <button onClick={() => setEditQuestionnaire(null)} className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold">Annuler</button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={saving || !editName.trim()}
+                className="flex-1 px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold disabled:opacity-40"
+              >
+                {saving ? 'Enregistrement...' : 'Enregistrer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

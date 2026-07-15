@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { subscribeToTemplates, addTemplate, deleteTemplate } from '../../lib/templates';
+import { subscribeToTemplates, addTemplate, updateTemplate, deleteTemplate } from '../../lib/templates';
 import type { HTMLTemplate } from '../../types';
-import { Upload, Trash2, FileText, Check, Plus, AlertCircle, RefreshCw } from 'lucide-react';
+import { Upload, Trash2, FileText, Check, Plus, AlertCircle, RefreshCw, Pencil, X, Search } from 'lucide-react';
 
 export default function AdminTemplates() {
   const [templates, setTemplates] = useState<HTMLTemplate[]>([]);
@@ -15,6 +15,17 @@ export default function AdminTemplates() {
   const [fileName, setFileName] = useState('');
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+
+  // Edit fields
+  const [editTemplate, setEditTemplate] = useState<HTMLTemplate | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editType, setEditType] = useState<HTMLTemplate['type']>('entry_self_assessment');
+  const [editFileContent, setEditFileContent] = useState('');
+  const [editFileName, setEditFileName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<'all' | HTMLTemplate['type']>('all');
 
   const [globalError, setGlobalError] = useState('');
 
@@ -80,6 +91,62 @@ export default function AdminTemplates() {
     }
   };
 
+  const openEdit = (t: HTMLTemplate) => {
+    setEditTemplate(t);
+    setEditName(t.name);
+    setEditType(t.type);
+    setEditFileContent('');
+    setEditFileName('');
+    setError('');
+  };
+
+  const handleEditFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.html')) {
+      setError('Veuillez sélectionner un fichier au format .html uniquement.');
+      return;
+    }
+
+    setEditFileName(file.name);
+    setError('');
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        setEditFileContent(event.target.result as string);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editTemplate || !editName.trim()) {
+      setError('Le nom ne peut pas être vide.');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+
+    try {
+      const updates: Partial<Omit<HTMLTemplate, 'id' | 'createdAt'>> = {
+        name: editName.trim(),
+        type: editType,
+      };
+      if (editFileContent) {
+        updates.htmlContent = editFileContent;
+      }
+      await updateTemplate(editTemplate.id, updates);
+      setEditTemplate(null);
+    } catch (e: any) {
+      setError(e.message || 'Une erreur est survenue lors de l\'enregistrement.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer cette fiche ?')) return;
     try {
@@ -88,6 +155,14 @@ export default function AdminTemplates() {
       console.error(e);
     }
   };
+
+  const filteredTemplates = templates.filter((t) => {
+    if (filterType !== 'all' && t.type !== filterType) return false;
+    if (searchQuery.trim() !== '') {
+      return t.name.toLowerCase().includes(searchQuery.toLowerCase());
+    }
+    return true;
+  });
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -110,6 +185,36 @@ export default function AdminTemplates() {
           Importer une fiche (.html)
         </button>
       </header>
+
+      {/* Search and Filter Bar */}
+      <div className="bg-white border-b border-slate-200 p-4 shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Search Input */}
+        <div className="relative max-w-xs w-full">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+            <Search className="w-4 h-4" />
+          </span>
+          <input
+            type="text"
+            placeholder="Rechercher une fiche..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+          />
+        </div>
+
+        {/* Filter Tabs */}
+        <div className="flex bg-slate-100 p-1 rounded-xl">
+          {(['all', 'entry_self_assessment', 'exit_assessment'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilterType(f)}
+              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${filterType === f ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              {{ all: 'Toutes', entry_self_assessment: 'Auto-positionnement', exit_assessment: 'Bilans de sortie' }[f]}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {globalError && (
         <div className="mx-6 mt-4 bg-red-50 border border-red-200 rounded-xl p-4 flex gap-3 text-red-700 text-xs">
@@ -143,10 +248,22 @@ export default function AdminTemplates() {
             + Importer un fichier
           </button>
         </div>
+      ) : filteredTemplates.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center p-8 bg-slate-50/50">
+          <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-500 border border-indigo-100">
+            <Search className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-700">Aucune fiche trouvée</p>
+            <p className="text-xs text-slate-400 mt-1 max-w-xs">
+              Aucun modèle de fiche ne correspond à votre recherche ou filtre.
+            </p>
+          </div>
+        </div>
       ) : (
         <div className="flex-1 overflow-y-auto p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {templates.map((t) => (
+            {filteredTemplates.map((t) => (
               <div key={t.id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
                 <div>
                   <div className="flex items-center justify-between mb-3">
@@ -157,13 +274,22 @@ export default function AdminTemplates() {
                     }`}>
                       {t.type === 'entry_self_assessment' ? 'Auto-positionnement' : 'Bilan de sortie'}
                     </span>
-                    <button
-                      onClick={() => handleDelete(t.id)}
-                      className="text-slate-400 hover:text-red-500 transition-colors p-1"
-                      title="Supprimer la fiche"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => openEdit(t)}
+                        className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
+                        title="Modifier la fiche"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(t.id)}
+                        className="text-slate-400 hover:text-red-500 transition-colors p-1"
+                        title="Supprimer la fiche"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                   <h3 className="font-bold text-sm text-slate-800 mb-1">{t.name}</h3>
                   <p className="text-[10px] text-slate-400">
@@ -247,6 +373,82 @@ export default function AdminTemplates() {
                 className="flex-1 px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold disabled:opacity-40"
               >
                 {uploading ? 'Importation...' : 'Importer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editTemplate && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setEditTemplate(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-1">
+              <h3 className="font-bold text-sm">Modifier la fiche</h3>
+              <button onClick={() => setEditTemplate(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400 mb-5">
+              Modifiez les informations ou importez un nouveau fichier HTML pour remplacer le contenu existant.
+            </p>
+
+            <div className="space-y-4 mb-5">
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1">Nom de la fiche</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  placeholder="Ex: Bilan Compétences C1-C6"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1">Rôle de la fiche</label>
+                <select
+                  value={editType}
+                  onChange={e => setEditType(e.target.value as HTMLTemplate['type'])}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="entry_self_assessment">Fiche d'Auto-positionnement (Apprenant)</option>
+                  <option value="exit_assessment">Bilan de sortie (Formateur)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-2">Remplacer le fichier (Optionnel)</label>
+                <label className="w-full flex flex-col items-center justify-center border border-dashed border-slate-300 rounded-xl p-4 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors">
+                  <Upload className="w-5 h-5 text-slate-400 mb-2" />
+                  <span className="text-xs text-slate-600 font-medium">
+                    {editFileName ? editFileName : 'Choisir un nouveau fichier .html'}
+                  </span>
+                  <input
+                    type="file"
+                    accept=".html"
+                    onChange={handleEditFileChange}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex gap-2 text-red-700 text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <button onClick={() => setEditTemplate(null)} className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold">Annuler</button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={saving || !editName.trim()}
+                className="flex-1 px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold disabled:opacity-40"
+              >
+                {saving ? 'Enregistrement...' : 'Enregistrer'}
               </button>
             </div>
           </div>

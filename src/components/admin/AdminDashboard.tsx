@@ -21,23 +21,11 @@ function StatusBadge({ status }: { status: Session['status'] }) {
 
 export default function AdminDashboard() {
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [questionnaires, setQuestionnaires] = useState<Questionnaire[]>([]);
-
   const [qrSession, setQrSession] = useState<Session | null>(null);
-
-  // Modales
-  const [showIndividualModal, setShowIndividualModal] = useState(false);
-  const [individualName, setIndividualName] = useState('');
-  const [selectedQId, setSelectedQId] = useState('');
-  const [createdLink, setCreatedLink] = useState('');
-  const [creating, setCreating] = useState(false);
-
   const navigate = useNavigate();
 
   useEffect(() => {
-    const unsubSessions = subscribeToSessions(setSessions);
-    const unsubQuestionnaires = subscribeToQuestionnaires(setQuestionnaires);
-    return () => { unsubSessions(); unsubQuestionnaires(); };
+    return subscribeToSessions(setSessions);
   }, []);
 
   const activeSessions = sessions.filter(s => s.status === 'active').length;
@@ -52,26 +40,15 @@ export default function AdminDashboard() {
     return Math.round(avg);
   })();
 
-  const handleCreateIndividual = async () => {
-    if (!individualName.trim() || !selectedQId) return;
-    setCreating(true);
-    try {
-      const id = await createSession(selectedQId, 'individual', individualName.trim());
-      setCreatedLink(`${window.location.origin}/s/${id}`);
-    } finally {
-      setCreating(false);
-    }
-  };
-
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0">
         <h2 className="font-semibold text-sm text-slate-800">Tableau de bord</h2>
         <button
-          onClick={() => { setShowIndividualModal(true); setCreatedLink(''); }}
+          onClick={() => navigate('/admin/sessions', { state: { openCreateModal: true } })}
           className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 transition-colors"
         >
-          + Session individuelle
+          + Créer une session
         </button>
       </header>
 
@@ -118,7 +95,7 @@ export default function AdminDashboard() {
                     <button onClick={() => navigate(`/admin/sessions/${s.id}`)} className="text-indigo-500 hover:underline">
                       {s.status === 'completed' ? 'Exporter' : 'Suivre'}
                     </button>
-                    {s.status === 'pending' && (
+                    {s.status !== 'completed' && (
                       <button
                         onClick={() => setQrSession(s)}
                         className="text-[10px] text-indigo-400 hover:text-indigo-600 underline"
@@ -146,60 +123,6 @@ export default function AdminDashboard() {
             </div>
             <QRCodePanel url={`${window.location.origin}/s/${qrSession.id}`} size={160} />
             <button onClick={() => setQrSession(null)} className="text-xs text-slate-500 hover:underline">Fermer</button>
-          </div>
-        </div>
-      )}
-
-      {/* Modale session individuelle */}
-      {showIndividualModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowIndividualModal(false)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl" onClick={e => e.stopPropagation()}>
-            <h3 className="font-bold text-sm mb-4">Nouvelle session individuelle</h3>
-            {!createdLink ? (
-              <>
-                <div className="space-y-3 mb-4">
-                  <div>
-                    <label className="text-xs font-medium text-slate-600 block mb-1">Prénom de l'utilisateur</label>
-                    <input
-                      type="text"
-                      value={individualName}
-                      onChange={e => setIndividualName(e.target.value)}
-                      placeholder="Ex: Sophie"
-                      className="w-full px-3 py-2.5 rounded-lg bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-slate-600 block mb-1">Questionnaire</label>
-                    <select
-                      value={selectedQId}
-                      onChange={e => setSelectedQId(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-lg bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    >
-                      <option value="">Sélectionner...</option>
-                      {questionnaires.map(q => (
-                        <option key={q.id} value={q.id}>{q.name}{q.isActive ? ' (actif)' : ''}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={() => setShowIndividualModal(false)} className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium">Annuler</button>
-                  <button
-                    onClick={handleCreateIndividual}
-                    disabled={creating || !individualName.trim() || !selectedQId}
-                    className="flex-1 px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs font-medium disabled:opacity-40"
-                  >
-                    {creating ? 'Création...' : 'Créer'}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="flex flex-col items-center gap-4">
-                <p className="text-xs text-slate-500 text-center">Session créée pour <strong>{individualName}</strong>. Partagez ce QR code ou ce lien.</p>
-                <QRCodePanel url={createdLink} size={140} />
-                <button onClick={() => setShowIndividualModal(false)} className="text-xs text-slate-500 hover:underline">Fermer</button>
-              </div>
-            )}
           </div>
         </div>
       )}

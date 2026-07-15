@@ -1,6 +1,6 @@
 import {
   collection, doc, addDoc, updateDoc, getDocs, getDoc,
-  onSnapshot
+  onSnapshot, deleteDoc
 } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Questionnaire, QuestionnaireData } from '../types';
@@ -52,4 +52,8 @@ export async function getQuestionnaireById(id: string): Promise<Questionnaire | 
 
 export async function updateQuestionnaire(id: string, data: Partial<Questionnaire>): Promise<void> {
   await updateDoc(doc(db, 'questionnaires', id), data as Record<string, unknown>);
+}
+
+export async function deleteQuestionnaire(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'questionnaires', id));
 }

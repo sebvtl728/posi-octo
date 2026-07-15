@@ -10,7 +10,6 @@ const AdminQuestionnaires = lazy(() => import('./components/admin/AdminQuestionn
 const AdminTemplates = lazy(() => import('./components/admin/AdminTemplates'));
 const AdminSessionList = lazy(() => import('./components/admin/AdminSessionList'));
 const AdminSessionMonitor = lazy(() => import('./components/admin/AdminSessionMonitor'));
-const AdminPositioning = lazy(() => import('./components/admin/AdminPositioning'));
 const UserEntry = lazy(() => import('./components/user/UserEntry'));
 const UserChat = lazy(() => import('./components/user/UserChat'));
 const UserEntryAssessment = lazy(() => import('./components/user/UserEntryAssessment'));
@@ -29,7 +28,7 @@ const router = createBrowserRouter([
           { path: '/admin/templates', element: <AdminTemplates /> },
           { path: '/admin/sessions', element: <AdminSessionList /> },
           { path: '/admin/sessions/:sessionId', element: <AdminSessionMonitor /> },
-          { path: '/admin/positioning', element: <AdminPositioning /> },
+          { path: '/admin/positioning', element: <Navigate to="/admin/sessions" replace /> },
           { path: '/admin/positioning/:sessionId', element: <AdminSessionMonitor /> },
           { path: '/admin/exit-assessment/:sessionId', element: <AdminExitAssessment /> },
         ],
