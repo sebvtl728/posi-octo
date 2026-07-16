@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
 import { subscribeToSession, subscribeToMessages, updateSession, getMessages } from '../../lib/sessions';
 import { getQuestionnaireById } from '../../lib/questionnaire';
 import { computeScores, computeSynthesis, computePositioningSynthesis, generateExportHTML, generatePositioningHTML, downloadHTML } from '../../lib/export';
@@ -17,7 +18,19 @@ function ChatBubble({ msg }: { msg: Message }) {
             : 'bg-white border border-slate-200 text-slate-800 rounded-bl-sm'
         }`}
       >
-        {msg.content}
+        {isUser ? (
+          msg.content
+        ) : (
+          <div className="prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 overflow-hidden">
+            <ReactMarkdown
+              components={{
+                input: () => null,
+              }}
+            >
+              {msg.content}
+            </ReactMarkdown>
+          </div>
+        )}
       </div>
     </div>
   );
