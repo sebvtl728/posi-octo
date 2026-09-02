@@ -161,7 +161,7 @@ Consignes importantes pour formuler les questions :
       const welcomeMsg = await chatWithMistral([
         ...history,
         { role: 'user', content: welcomeContent },
-      ], 'mistral-large-latest');
+      ], 'mistral-small-latest');
       await addMessage(sessionId, 'assistant', welcomeMsg);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erreur de connexion à l\'IA.';
@@ -239,7 +239,7 @@ Consignes importantes pour formuler les questions :
         ...messages.map(m => ({ role: m.role, content: m.content })),
         { role: 'user', content: userContent + stateInstruction },
       ];
-      const reply = await chatWithMistral(history, 'mistral-large-latest');
+      const reply = await chatWithMistral(history, 'mistral-small-latest');
       await addMessage(sessionId, 'assistant', reply);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erreur de connexion à l\'IA.';
