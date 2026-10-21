@@ -1,12 +1,12 @@
 export async function fetchMistralModels(): Promise<string[]> {
   const response = await fetch('/api/models');
   if (!response.ok) {
-    return ['mistral-small-latest', 'mistral-large-latest', 'mistral-medium-latest']; // defaults
+    return ['gemini-2.5-flash', 'ministral-8b-latest', 'mistral-small-latest']; // defaults
   }
   return await response.json();
 }
 
-export async function chatWithMistral(messages: { role: string; content: string }[], model: string = 'mistral-small-latest') {
+export async function chatWithMistral(messages: { role: string; content: string }[], model: string = 'gemini-2.5-flash') {
   const response = await fetch('/api/chat', {
     method: 'POST',
     headers: {

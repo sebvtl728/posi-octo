@@ -54,8 +54,8 @@ export default function ChatInterface({ sessionId, onLeave }: ChatInterfaceProps
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [documents, setDocuments] = useState<DocumentData[]>([]);
-  const [models, setModels] = useState<string[]>(['mistral-small-latest']);
-  const [selectedModel, setSelectedModel] = useState<string>('mistral-small-latest');
+  const [models, setModels] = useState<string[]>(['gemini-2.5-flash']);
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-2.5-flash');
   const [userName, setUserName] = useState<string>('');
   const [errorInfo, setErrorInfo] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);

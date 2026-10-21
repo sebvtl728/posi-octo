@@ -61,6 +61,14 @@ export default function UserChat() {
     return () => { unsubSession(); unsubMessages(); };
   }, [sessionId]);
 
+  // Synchronise l'index de question avec l'historique des réponses de l'utilisateur
+  useEffect(() => {
+    if (messages.length > 0 && allQuestions.length > 0) {
+      const userAnswersCount = messages.filter(m => m.role === 'user').length;
+      setQuestionIndex(Math.min(userAnswersCount, allQuestions.length - 1));
+    }
+  }, [messages, allQuestions.length]);
+
   useEffect(() => {
     if (session?.questionnaireId) {
       getQuestionnaireById(session.questionnaireId).then(q => {
@@ -161,7 +169,7 @@ Consignes importantes pour formuler les questions :
       const welcomeMsg = await chatWithMistral([
         ...history,
         { role: 'user', content: welcomeContent },
-      ], 'mistral-small-latest');
+      ], 'gemini-2.5-flash');
       await addMessage(sessionId, 'assistant', welcomeMsg);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erreur de connexion à l\'IA.';
@@ -239,7 +247,7 @@ Consignes importantes pour formuler les questions :
         ...messages.map(m => ({ role: m.role, content: m.content })),
         { role: 'user', content: userContent + stateInstruction },
       ];
-      const reply = await chatWithMistral(history, 'mistral-small-latest');
+      const reply = await chatWithMistral(history, 'gemini-2.5-flash');
       await addMessage(sessionId, 'assistant', reply);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erreur de connexion à l\'IA.';

@@ -22,7 +22,7 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans texte ni markdown autour. Fo
 {${categories.map(c => `"${c}": 75`).join(', ')}}`;
 
   try {
-    const response = await chatWithMistral([{ role: 'user', content: prompt }], 'mistral-small-latest');
+    const response = await chatWithMistral([{ role: 'user', content: prompt }], 'gemini-2.5-flash');
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return emptyResult;
     return JSON.parse(jsonMatch[0]);
@@ -45,7 +45,7 @@ export async function computeSynthesis(
   const prompt = `Génère une synthèse d'évaluation professionnelle en 3-4 phrases pour ${session.userName}. Scores obtenus : ${scoresStr}. Mentionne les points forts et les axes d'amélioration. Sois encourageant mais honnête. Base-toi sur ces échanges : ${transcript}`;
 
   try {
-    return await chatWithMistral([{ role: 'user', content: prompt }], 'mistral-small-latest');
+    return await chatWithMistral([{ role: 'user', content: prompt }], 'gemini-2.5-flash');
   } catch {
     return `Synthèse non disponible. Scores : ${scoresStr}.`;
   }
@@ -170,7 +170,7 @@ ${transcript}
 Sois précis, professionnel, en français.`;
 
   try {
-    return await chatWithMistral([{ role: 'user', content: prompt }], 'mistral-small-latest');
+    return await chatWithMistral([{ role: 'user', content: prompt }], 'gemini-2.5-flash');
   } catch {
     return `Synthèse de positionnement non disponible pour ${session.userName}.`;
   }

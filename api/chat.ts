@@ -7,7 +7,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const { messages, model } = req.body as { messages: unknown[]; model?: string };
-    const selectedModel = model || 'mistral-small-latest';
+    const selectedModel = model || 'gemini-2.5-flash';
 
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'Invalid messages array.' });
@@ -19,18 +19,57 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const ai = new GoogleGenAI({ apiKey: geminiApiKey });
       const systemMessage = messages.find((m: unknown) => (m as { role: string }).role === 'system') as { content: string } | undefined;
-      const contents = messages
-        .filter((m: unknown) => (m as { role: string }).role !== 'system')
-        .map((m: unknown) => {
-          const msg = m as { role: string; content: string };
-          return { role: msg.role === 'assistant' ? 'model' : 'user', parts: [{ text: msg.content }] };
-        });
+      
+      const rawContents = (messages as Array<{ role: string; content?: string }>)
+        .filter(m => m.role !== 'system')
+        .map(m => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          text: (m.content || '').toString().trim()
+        }))
+        .filter(item => item.text.length > 0);
 
-      const response = await ai.models.generateContent({
-        model: selectedModel,
-        contents,
-        config: { systemInstruction: systemMessage?.content },
-      });
+      const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
+      for (const item of rawContents) {
+        const last = contents[contents.length - 1];
+        if (last && last.role === item.role) {
+          last.parts[0].text += `\n\n${item.text}`;
+        } else {
+          contents.push({
+            role: item.role,
+            parts: [{ text: item.text }]
+          });
+        }
+      }
+
+      if (contents.length === 0) {
+        contents.push({ role: 'user', parts: [{ text: 'Bonjour' }] });
+      }
+
+      let response: any;
+      let retries = 0;
+      const MAX_RETRIES = 3;
+      let modelToUse = selectedModel;
+      while (retries < MAX_RETRIES) {
+        try {
+          response = await ai.models.generateContent({
+            model: modelToUse,
+            contents,
+            config: { systemInstruction: systemMessage?.content },
+          });
+          break;
+        } catch (err: unknown) {
+          retries++;
+          const msg = err instanceof Error ? err.message : '';
+          if (retries < MAX_RETRIES && (msg.includes('503') || msg.includes('429') || msg.includes('high demand') || msg.includes('UNAVAILABLE'))) {
+            if (modelToUse === 'gemini-2.5-flash') {
+              modelToUse = 'gemini-3.5-flash';
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000 * retries));
+          } else {
+            throw err;
+          }
+        }
+      }
 
       return res.json({ choices: [{ message: { content: response.text || '' } }] });
     }
